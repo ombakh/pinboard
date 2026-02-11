@@ -1,6 +1,17 @@
+@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&display=swap');
+
 :root {
-  font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
+  --bg: #eef3fa;
+  --panel: #f9fbff;
+  --panel-border: #cfdbed;
+  --ink: #0e1f33;
+  --muted: #5c6f89;
+  --brand: #1e5dbf;
+  --brand-dark: #16438a;
+  --danger: #a0233f;
+  --shadow: 0 20px 45px rgba(22, 46, 89, 0.13);
   line-height: 1.5;
+  font-family: 'Space Grotesk', 'Avenir Next', 'Segoe UI', sans-serif;
 }
 
 * {
@@ -9,4 +20,243 @@
 
 body {
   margin: 0;
+  color: var(--ink);
+  background:
+    radial-gradient(1100px 420px at top left, rgba(31, 95, 196, 0.17), transparent 70%),
+    linear-gradient(180deg, #f5f8ff 0%, var(--bg) 100%);
+}
+
+a {
+  color: var(--brand);
+  text-decoration: none;
+}
+
+a:hover {
+  color: var(--brand-dark);
+}
+
+input,
+textarea {
+  width: 100%;
+  border: 1px solid #b9c9e2;
+  border-radius: 10px;
+  padding: 0.7rem 0.85rem;
+  font: inherit;
+  color: var(--ink);
+  background: #fff;
+}
+
+input:focus,
+textarea:focus {
+  outline: 2px solid #a4c1ee;
+  outline-offset: 1px;
+}
+
+.app-shell {
+  min-height: 100vh;
+}
+
+.topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 1rem 1.5rem;
+  border-bottom: 1px solid var(--panel-border);
+  background: rgba(249, 251, 255, 0.85);
+  backdrop-filter: blur(8px);
+}
+
+.topbar__brand {
+  font-size: 1.15rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  color: var(--brand-dark);
+}
+
+.topbar__nav {
+  display: flex;
+  align-items: center;
+  gap: 0.9rem;
+  flex-wrap: wrap;
+}
+
+.topbar__user {
+  color: var(--muted);
+  font-size: 0.95rem;
+}
+
+.content-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 300px;
+  gap: 1rem;
+  max-width: 1200px;
+  margin: 1.3rem auto;
+  padding: 0 1rem;
+}
+
+.main-panel {
+  display: grid;
+  gap: 1rem;
+}
+
+.sidebar {
+  position: sticky;
+  top: 1rem;
+  height: fit-content;
+}
+
+.card {
+  background: linear-gradient(165deg, #ffffff 0%, var(--panel) 100%);
+  border: 1px solid var(--panel-border);
+  border-radius: 16px;
+  box-shadow: var(--shadow);
+  padding: 1.1rem 1rem;
+}
+
+.card__title,
+.page-title {
+  margin: 0 0 0.4rem;
+}
+
+.thread-body {
+  white-space: pre-wrap;
+}
+
+.thread-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.9rem;
+}
+
+.thread-item {
+  background: rgba(255, 255, 255, 0.75);
+  border: 1px solid var(--panel-border);
+  border-radius: 14px;
+  padding: 0.9rem;
+}
+
+.thread-item h3 {
+  margin: 0 0 0.25rem;
+}
+
+.form-grid {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.vote-controls {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  flex-wrap: wrap;
+}
+
+.btn {
+  border: 1px solid var(--brand-dark);
+  background: linear-gradient(180deg, #2e6fce, var(--brand));
+  color: #f5f9ff;
+  border-radius: 10px;
+  padding: 0.45rem 0.75rem;
+  font: inherit;
+  cursor: pointer;
+  transition: transform 0.12s ease, filter 0.15s ease;
+}
+
+.btn:hover {
+  filter: brightness(1.05);
+  transform: translateY(-1px);
+}
+
+.btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.btn--secondary {
+  color: var(--ink);
+  background: #edf3fd;
+  border: 1px solid #aac0e0;
+}
+
+.btn--vote {
+  background: #edf3fd;
+  color: var(--ink);
+  border-color: #aec2e2;
+}
+
+.btn--vote.is-active {
+  background: #dbe8fc;
+  border-color: #7ea3de;
+  color: #10366d;
+}
+
+.btn--vote.is-negative.is-active {
+  background: #f1e7ea;
+  border-color: #cf99aa;
+  color: #6b1f35;
+}
+
+.mini-list {
+  list-style: none;
+  margin: 0.5rem 0 0;
+  padding: 0;
+  display: grid;
+  gap: 0.5rem;
+}
+
+.mini-list li {
+  background: rgba(255, 255, 255, 0.7);
+  border: 1px solid #d3deed;
+  border-radius: 10px;
+  padding: 0.45rem 0.55rem;
+}
+
+.muted {
+  color: var(--muted);
+}
+
+.error-text {
+  color: var(--danger);
+}
+
+.auth-card {
+  max-width: 520px;
+}
+
+.admin-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 0.75rem;
+}
+
+.admin-table th,
+.admin-table td {
+  border-bottom: 1px solid #d7e0ef;
+  text-align: left;
+  padding: 0.55rem 0.45rem;
+  vertical-align: top;
+}
+
+.admin-table th {
+  color: var(--muted);
+  font-weight: 600;
+}
+
+@media (max-width: 940px) {
+  .content-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .sidebar {
+    position: static;
+  }
+
+  .admin-table {
+    display: block;
+    overflow-x: auto;
+  }
 }

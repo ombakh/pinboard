@@ -1,16 +1,14 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { createThread, fetchThreads } from '../services/threadService.js';
+import VoteControls from '../components/VoteControls.jsx';
+import { deleteThread, fetchThreads, voteThread } from '../services/threadService.js';
 
 function HomePage({ user }) {
   const [threads, setThreads] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const [form, setForm] = useState({
-    title: '',
-    body: ''
-  });
-  const [posting, setPosting] = useState(false);
+  const [votingThreadId, setVotingThreadId] = useState(null);
+  const [deletingThreadId, setDeletingThreadId] = useState(null);
 
   useEffect(() => {
     let active = true;
@@ -38,72 +36,77 @@ function HomePage({ user }) {
     };
   }, []);
 
-  function onChange(event) {
-    setForm((current) => ({
-      ...current,
-      [event.target.name]: event.target.value
-    }));
-  }
-
-  async function onSubmit(event) {
-    event.preventDefault();
+  async function onVote(threadId, vote) {
+    setVotingThreadId(threadId);
     setError('');
-    setPosting(true);
 
     try {
-      const created = await createThread(form);
-      setThreads((current) => [created, ...current]);
-      setForm({ title: '', body: '' });
-    } catch (submitError) {
-      setError(submitError.message);
+      const updatedThread = await voteThread(threadId, vote);
+      setThreads((current) =>
+        current.map((thread) => (thread.id === updatedThread.id ? updatedThread : thread))
+      );
+    } catch (voteError) {
+      setError(voteError.message);
     } finally {
-      setPosting(false);
+      setVotingThreadId(null);
+    }
+  }
+
+  async function onDelete(threadId) {
+    const confirmed = window.confirm('Delete this thread? This action cannot be undone.');
+    if (!confirmed) {
+      return;
+    }
+
+    setDeletingThreadId(threadId);
+    setError('');
+    try {
+      await deleteThread(threadId);
+      setThreads((current) => current.filter((thread) => thread.id !== threadId));
+    } catch (deleteError) {
+      setError(deleteError.message || 'Could not delete thread');
+    } finally {
+      setDeletingThreadId(null);
     }
   }
 
   return (
     <section>
-      <h1>Forum Home</h1>
-      {!user ? (
-        <p>
-          You need to <Link to="/login">login</Link> to post a thread.
-        </p>
-      ) : null}
+      <div className="card">
+        <h1 className="page-title">Recent Threads</h1>
+        {!user ? (
+          <p className="muted">
+            You can browse threads. <Link to="/login">Login</Link> to vote and post.
+          </p>
+        ) : null}
+        {error ? <p className="error-text">{error}</p> : null}
+        {loading ? <p className="muted">Loading...</p> : null}
+        {!loading && threads.length === 0 ? <p className="muted">No threads yet.</p> : null}
+      </div>
 
-      <form
-        onSubmit={onSubmit}
-        style={{ display: 'grid', gap: '0.75rem', maxWidth: 680 }}
-      >
-        <input
-          name="title"
-          value={form.title}
-          onChange={onChange}
-          placeholder="Thread title"
-          required
-        />
-        <textarea
-          name="body"
-          value={form.body}
-          onChange={onChange}
-          placeholder="What do you want to discuss?"
-          rows={6}
-          required
-        />
-        <button type="submit" disabled={posting || !user}>
-          {posting ? 'Posting...' : 'Post Thread'}
-        </button>
-      </form>
-
-      {error ? <p style={{ color: 'crimson' }}>{error}</p> : null}
-
-      <h2>Recent Threads</h2>
-      {loading ? <p>Loading...</p> : null}
-      {!loading && threads.length === 0 ? <p>No threads yet.</p> : null}
-      <ul>
+      <ul className="thread-list">
         {threads.map((thread) => (
-          <li key={thread.id}>
-            <Link to={`/threads/${thread.id}`}>{thread.title}</Link>{' '}
-            <small>by {thread.authorName}</small>
+          <li key={thread.id} className="thread-item">
+            <h3>
+              <Link to={`/threads/${thread.id}`}>{thread.title}</Link>
+            </h3>
+            <p className="muted">by {thread.authorName}</p>
+            <VoteControls
+              thread={thread}
+              user={user}
+              disabled={votingThreadId === thread.id}
+              onVote={(vote) => onVote(thread.id, vote)}
+            />
+            {user?.isAdmin ? (
+              <button
+                className="btn btn--secondary"
+                type="button"
+                onClick={() => onDelete(thread.id)}
+                disabled={deletingThreadId === thread.id}
+              >
+                Delete
+              </button>
+            ) : null}
           </li>
         ))}
       </ul>

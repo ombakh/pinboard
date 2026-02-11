@@ -40,11 +40,13 @@ router.post('/register', (req, res) => {
 
     const user = db
       .prepare(
-        `SELECT id, name, email, created_at AS createdAt
+        `SELECT id, name, email, is_admin AS isAdmin, banned_at AS bannedAt, created_at AS createdAt
          FROM users
          WHERE id = ?`
       )
       .get(insert.lastInsertRowid);
+
+    user.isAdmin = Boolean(user.isAdmin);
 
     const token = signUserToken(user);
     setAuthCookie(res, token);
@@ -71,6 +73,10 @@ router.post('/login', (req, res) => {
       return res.status(401).json({ message: 'Invalid credentials' });
     }
 
+    if (user.banned_at) {
+      return res.status(403).json({ message: `User is banned${user.ban_reason ? `: ${user.ban_reason}` : ''}` });
+    }
+
     const isValid = bcrypt.compareSync(password, user.password_hash);
     if (!isValid) {
       return res.status(401).json({ message: 'Invalid credentials' });
@@ -80,6 +86,8 @@ router.post('/login', (req, res) => {
       id: user.id,
       name: user.name,
       email: user.email,
+      isAdmin: Boolean(user.is_admin),
+      bannedAt: user.banned_at,
       createdAt: user.created_at
     };
     const token = signUserToken(safeUser);
@@ -107,7 +115,7 @@ router.get('/me', (req, res) => {
     const db = getDb();
     const user = db
       .prepare(
-        `SELECT id, name, email, created_at AS createdAt
+        `SELECT id, name, email, is_admin AS isAdmin, banned_at AS bannedAt, ban_reason AS banReason, created_at AS createdAt
          FROM users
          WHERE id = ?`
       )
@@ -118,6 +126,12 @@ router.get('/me', (req, res) => {
       return res.status(401).json({ message: 'Unauthorized' });
     }
 
+    if (user.bannedAt) {
+      clearAuthCookie(res);
+      return res.status(403).json({ message: `User is banned${user.banReason ? `: ${user.banReason}` : ''}` });
+    }
+
+    user.isAdmin = Boolean(user.isAdmin);
     return res.json({ user });
   } catch (_error) {
     clearAuthCookie(res);
