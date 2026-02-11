@@ -1,8 +1,8 @@
 const express = require('express');
 const { getDb } = require('../../db');
 const requireAuth = require('../../middlewares/requireAuth');
-const requireAdmin = require('../../middlewares/requireAdmin');
 const { TOKEN_COOKIE_NAME, verifyUserToken } = require('../../auth/token');
+const { getBoardRole } = require('../../utils/boardPermissions');
 
 const router = express.Router();
 
@@ -26,13 +26,35 @@ function buildThreadSelect() {
       t.id,
       t.title,
       t.body,
+      t.board_id AS boardId,
+      b.name AS boardName,
+      b.slug AS boardSlug,
       t.author_name AS authorName,
       t.created_at AS createdAt,
       t.author_user_id AS authorUserId,
+      (
+        SELECT COUNT(*)
+        FROM thread_responses tr
+        WHERE tr.thread_id = t.id
+      ) AS responseCount,
+      (
+        SELECT MAX(tr.created_at)
+        FROM thread_responses tr
+        WHERE tr.thread_id = t.id
+      ) AS lastResponseAt,
+      COALESCE(
+        (
+          SELECT MAX(tr.created_at)
+          FROM thread_responses tr
+          WHERE tr.thread_id = t.id
+        ),
+        t.created_at
+      ) AS latestActivityAt,
       COALESCE(SUM(CASE WHEN v.vote = 1 THEN 1 ELSE 0 END), 0) AS upvotes,
       COALESCE(SUM(CASE WHEN v.vote = -1 THEN 1 ELSE 0 END), 0) AS downvotes,
       MAX(CASE WHEN v.user_id = ? THEN v.vote ELSE 0 END) AS userVote
     FROM threads t
+    LEFT JOIN boards b ON b.id = t.board_id
     LEFT JOIN thread_votes v ON v.thread_id = t.id
   `;
 }
@@ -57,16 +79,45 @@ function buildResponseSelect() {
 router.get('/', (_req, res) => {
   try {
     const viewerId = getViewerId(_req) || -1;
+    const boardId = Number(_req.query.boardId);
+    const search = String(_req.query.search || '').trim();
+    const sort = String(_req.query.sort || 'new');
+    const hasBoardFilter = Number.isInteger(boardId) && boardId > 0;
+    const hasSearchFilter = search.length > 0;
     const db = getDb();
+    const whereParts = [];
+    const params = [viewerId];
+
+    if (hasBoardFilter) {
+      whereParts.push('t.board_id = ?');
+      params.push(boardId);
+    }
+    if (hasSearchFilter) {
+      whereParts.push('(t.title LIKE ? OR t.body LIKE ?)');
+      params.push(`%${search}%`, `%${search}%`);
+    }
+
+    let orderClause = 'datetime(t.created_at) DESC';
+    if (sort === 'top') {
+      orderClause = '(upvotes - downvotes) DESC, datetime(t.created_at) DESC';
+    } else if (sort === 'active') {
+      orderClause = 'datetime(latestActivityAt) DESC';
+    } else if (sort === 'discussed') {
+      orderClause = 'responseCount DESC, datetime(t.created_at) DESC';
+    }
+
     const threads = db
       .prepare(
         `${buildThreadSelect()}
+         ${whereParts.length ? `WHERE ${whereParts.join(' AND ')}` : ''}
          GROUP BY t.id
-         ORDER BY datetime(t.created_at) DESC`
+         ORDER BY ${orderClause}`
       )
-      .all(viewerId)
+      .all(...params)
       .map((thread) => ({
         ...thread,
+        boardId: thread.boardId ? Number(thread.boardId) : null,
+        responseCount: Number(thread.responseCount),
         upvotes: Number(thread.upvotes),
         downvotes: Number(thread.downvotes),
         userVote: Number(thread.userVote)
@@ -96,6 +147,8 @@ router.get('/:threadId', (req, res) => {
     return res.json({
       thread: {
         ...thread,
+        boardId: thread.boardId ? Number(thread.boardId) : null,
+        responseCount: Number(thread.responseCount),
         upvotes: Number(thread.upvotes),
         downvotes: Number(thread.downvotes),
         userVote: Number(thread.userVote)
@@ -109,21 +162,27 @@ router.get('/:threadId', (req, res) => {
 router.post('/', requireAuth, (req, res) => {
   const title = (req.body.title || '').trim();
   const body = (req.body.body || '').trim();
+  const boardId = Number(req.body.boardId);
   const authorName = req.authUser.name || 'Member';
   const authorUserId = req.authUser.id;
 
-  if (!title || !body) {
-    return res.status(400).json({ message: 'Title and body are required' });
+  if (!title || !body || !Number.isInteger(boardId) || boardId <= 0) {
+    return res.status(400).json({ message: 'Title, body, and board are required' });
   }
 
   try {
     const db = getDb();
+    const boardExists = db.prepare('SELECT id FROM boards WHERE id = ?').get(boardId);
+    if (!boardExists) {
+      return res.status(400).json({ message: 'Selected board does not exist' });
+    }
+
     const result = db
       .prepare(
-        `INSERT INTO threads (title, body, author_name, author_user_id)
-         VALUES (?, ?, ?, ?)`
+        `INSERT INTO threads (title, body, board_id, author_name, author_user_id)
+         VALUES (?, ?, ?, ?, ?)`
       )
-      .run(title, body, authorName, authorUserId);
+      .run(title, body, boardId, authorName, authorUserId);
 
     const thread = db
       .prepare(
@@ -136,6 +195,8 @@ router.post('/', requireAuth, (req, res) => {
     return res.status(201).json({
       thread: {
         ...thread,
+        boardId: thread.boardId ? Number(thread.boardId) : null,
+        responseCount: Number(thread.responseCount),
         upvotes: Number(thread.upvotes),
         downvotes: Number(thread.downvotes),
         userVote: Number(thread.userVote)
@@ -186,6 +247,8 @@ router.post('/:threadId/vote', requireAuth, (req, res) => {
     return res.json({
       thread: {
         ...thread,
+        boardId: thread.boardId ? Number(thread.boardId) : null,
+        responseCount: Number(thread.responseCount),
         upvotes: Number(thread.upvotes),
         downvotes: Number(thread.downvotes),
         userVote: Number(thread.userVote)
@@ -196,7 +259,7 @@ router.post('/:threadId/vote', requireAuth, (req, res) => {
   }
 });
 
-router.delete('/:threadId', requireAuth, requireAdmin, (req, res) => {
+router.delete('/:threadId', requireAuth, (req, res) => {
   const threadId = Number(req.params.threadId);
   if (!Number.isInteger(threadId) || threadId <= 0) {
     return res.status(400).json({ message: 'Invalid thread id' });
@@ -204,9 +267,16 @@ router.delete('/:threadId', requireAuth, requireAdmin, (req, res) => {
 
   try {
     const db = getDb();
-    const exists = db.prepare('SELECT id FROM threads WHERE id = ?').get(threadId);
-    if (!exists) {
+    const thread = db
+      .prepare('SELECT id, board_id AS boardId FROM threads WHERE id = ?')
+      .get(threadId);
+    if (!thread) {
       return res.status(404).json({ message: 'Thread not found' });
+    }
+
+    const role = thread.boardId ? getBoardRole(db, thread.boardId, req.authUser) : null;
+    if (!req.authUser.isAdmin && !(role && role.canModerateBoard)) {
+      return res.status(403).json({ message: 'Board moderator or admin privileges required' });
     }
 
     db.prepare('DELETE FROM threads WHERE id = ?').run(threadId);

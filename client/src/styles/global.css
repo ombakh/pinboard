@@ -42,7 +42,8 @@ a:hover {
 }
 
 input,
-textarea {
+textarea,
+select {
   width: 100%;
   border: 1px solid #b9c9e2;
   border-radius: 10px;
@@ -53,7 +54,8 @@ textarea {
 }
 
 input:focus,
-textarea:focus {
+textarea:focus,
+select:focus {
   outline: 2px solid #a4c1ee;
   outline-offset: 1px;
 }
@@ -135,6 +137,12 @@ textarea:focus {
   margin: 0 0 0.4rem;
 }
 
+.section-header-card {
+  margin-top: 0.4rem;
+  padding-top: 1.35rem;
+  padding-bottom: 1.2rem;
+}
+
 .thread-body {
   white-space: pre-wrap;
 }
@@ -145,6 +153,31 @@ textarea:focus {
   padding: 0;
   display: grid;
   gap: 0.9rem;
+}
+
+.board-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 0.9rem;
+}
+
+.board-card {
+  display: block;
+  background: rgba(255, 255, 255, 0.78);
+  border: 1px solid var(--panel-border);
+  border-radius: 14px;
+  padding: 0.9rem;
+  color: var(--ink);
+  transition: transform var(--motion-medium) ease, border-color var(--motion-fast) ease;
+}
+
+.board-card:hover {
+  transform: translateY(-3px);
+  border-color: #9db8e2;
+}
+
+.board-card h3 {
+  margin: 0 0 0.25rem;
 }
 
 .thread-item {
@@ -182,6 +215,14 @@ textarea:focus {
   gap: 0.75rem;
 }
 
+.create-board-panel {
+  margin-top: 0.75rem;
+  padding: 0.75rem;
+  border: 1px dashed #b8cbe7;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.65);
+}
+
 .vote-controls {
   display: inline-flex;
   align-items: center;
@@ -217,6 +258,11 @@ textarea:focus {
   border: 1px solid #aac0e0;
 }
 
+.btn--secondary.is-selected {
+  background: #d7e6fb;
+  border-color: #89aad9;
+}
+
 .btn--vote {
   background: #edf3fd;
   color: var(--ink);
@@ -245,6 +291,10 @@ textarea:focus {
 }
 
 .mini-list li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.6rem;
   background: rgba(255, 255, 255, 0.7);
   border: 1px solid #d3deed;
   border-radius: 10px;
@@ -255,6 +305,13 @@ textarea:focus {
 .mini-list li:hover {
   transform: translateX(2px);
   border-color: #aac1e3;
+}
+
+.board-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.55rem;
+  margin-top: 0.75rem;
 }
 
 .muted {
@@ -292,6 +349,11 @@ textarea:focus {
   margin-top: 1.2rem;
   border-top: 1px solid #d6e1ef;
   padding-top: 1rem;
+}
+
+.profile-layout {
+  display: grid;
+  gap: 1rem;
 }
 
 .response-list {

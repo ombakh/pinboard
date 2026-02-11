@@ -3,9 +3,12 @@ import { Link, Route, Routes, useLocation } from 'react-router-dom';
 import PageMotion from './components/PageMotion.jsx';
 import HomePage from './pages/HomePage.jsx';
 import AdminPage from './pages/AdminPage.jsx';
+import BoardPage from './pages/BoardPage.jsx';
+import BoardsPage from './pages/BoardsPage.jsx';
 import LoginPage from './pages/LoginPage.jsx';
 import MyPostsSidebar from './components/MyPostsSidebar.jsx';
 import PostPage from './pages/PostPage.jsx';
+import ProfilePage from './pages/ProfilePage.jsx';
 import ThreadPage from './pages/ThreadPage.jsx';
 import { getCurrentUser, logout } from './services/authService.js';
 
@@ -60,7 +63,9 @@ function App() {
         <div className="topbar__brand">Pinboard</div>
         <nav className="topbar__nav">
           <Link to="/">Home</Link>
+          <Link to="/boards">Boards</Link>
           <Link to="/post">Post</Link>
+          {user ? <Link to={`/users/${user.id}`}>My Profile</Link> : null}
           {user?.isAdmin ? <Link to="/admin">Admin</Link> : null}
           {authLoading ? null : user ? (
             <>
@@ -80,12 +85,15 @@ function App() {
           <PageMotion routeKey={location.pathname}>
             <Routes location={location}>
               <Route path="/" element={<HomePage user={user} />} />
+              <Route path="/boards" element={<BoardsPage user={user} />} />
+              <Route path="/boards/:slug" element={<BoardPage user={user} />} />
               <Route
                 path="/post"
                 element={<PostPage user={user} onThreadPosted={onThreadPosted} />}
               />
               <Route path="/admin" element={<AdminPage user={user} />} />
               <Route path="/login" element={<LoginPage onAuthSuccess={setUser} />} />
+              <Route path="/users/:userId" element={<ProfilePage />} />
               <Route path="/threads/:threadId" element={<ThreadPage user={user} />} />
             </Routes>
           </PageMotion>

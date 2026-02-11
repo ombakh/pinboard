@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { useNavigate } from 'react-router-dom';
 import { useParams } from 'react-router-dom';
 import VoteControls from '../components/VoteControls.jsx';
@@ -133,10 +134,21 @@ function ThreadPage({ user }) {
 
   return (
     <article className="card">
+      {thread.boardSlug ? (
+        <p className="muted">
+          <Link to={`/boards/${thread.boardSlug}`}>/{thread.boardSlug}</Link>
+        </p>
+      ) : null}
       <h1 className="page-title">{thread.title}</h1>
       <p className="muted">
         <small>
-          By {thread.authorName} on {new Date(thread.createdAt).toLocaleString()}
+          By{' '}
+          {thread.authorUserId ? (
+            <Link to={`/users/${thread.authorUserId}`}>{thread.authorName}</Link>
+          ) : (
+            thread.authorName
+          )}{' '}
+          on {new Date(thread.createdAt).toLocaleString()}
         </small>
       </p>
       <p className="thread-body">{thread.body}</p>
@@ -186,7 +198,12 @@ function ThreadPage({ user }) {
               />
               <p className="muted">
                 <small>
-                  {response.authorName} on {new Date(response.createdAt).toLocaleString()}
+                  {response.userId ? (
+                    <Link to={`/users/${response.userId}`}>{response.authorName}</Link>
+                  ) : (
+                    response.authorName
+                  )}{' '}
+                  on {new Date(response.createdAt).toLocaleString()}
                 </small>
               </p>
             </li>

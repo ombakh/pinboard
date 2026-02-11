@@ -1,27 +1,25 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import VoteControls from '../components/VoteControls.jsx';
-import { deleteThread, fetchThreads, voteThread } from '../services/threadService.js';
+import { fetchBoards } from '../services/threadService.js';
 
 function HomePage({ user }) {
-  const [threads, setThreads] = useState([]);
+  const [boards, setBoards] = useState([]);
+  const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const [votingThreadId, setVotingThreadId] = useState(null);
-  const [deletingThreadId, setDeletingThreadId] = useState(null);
 
   useEffect(() => {
     let active = true;
 
-    async function loadThreads() {
+    async function loadBoards() {
       try {
-        const threadList = await fetchThreads();
+        const boardList = await fetchBoards();
         if (active) {
-          setThreads(threadList);
+          setBoards(boardList);
         }
       } catch (_error) {
         if (active) {
-          setError('Could not load threads');
+          setError('Could not load boards');
         }
       } finally {
         if (active) {
@@ -30,90 +28,76 @@ function HomePage({ user }) {
       }
     }
 
-    loadThreads();
+    loadBoards();
     return () => {
       active = false;
     };
   }, []);
 
-  async function onVote(threadId, vote) {
-    setVotingThreadId(threadId);
-    setError('');
-
-    try {
-      const updatedThread = await voteThread(threadId, vote);
-      setThreads((current) =>
-        current.map((thread) => (thread.id === updatedThread.id ? updatedThread : thread))
-      );
-    } catch (voteError) {
-      setError(voteError.message);
-    } finally {
-      setVotingThreadId(null);
+  const filteredBoards = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    if (!q) {
+      return boards;
     }
-  }
-
-  async function onDelete(threadId) {
-    const confirmed = window.confirm('Delete this thread? This action cannot be undone.');
-    if (!confirmed) {
-      return;
-    }
-
-    setDeletingThreadId(threadId);
-    setError('');
-    try {
-      await deleteThread(threadId);
-      setThreads((current) => current.filter((thread) => thread.id !== threadId));
-    } catch (deleteError) {
-      setError(deleteError.message || 'Could not delete thread');
-    } finally {
-      setDeletingThreadId(null);
-    }
-  }
+    return boards.filter(
+      (board) =>
+        board.name.toLowerCase().includes(q) ||
+        (board.description || '').toLowerCase().includes(q) ||
+        board.slug.toLowerCase().includes(q)
+    );
+  }, [boards, search]);
 
   return (
     <section>
-      <div className="card">
-        <h1 className="page-title">Recent Threads</h1>
+      <div className="card section-header-card">
+        <h1 className="page-title">Communities</h1>
+        <input
+          value={search}
+          onChange={(event) => setSearch(event.target.value)}
+          placeholder="Search boards by name, slug, or description..."
+        />
         {!user ? (
           <p className="muted">
-            You can browse threads. <Link to="/login">Login</Link> to vote and post.
+            Browse communities and open threads inside each board. <Link to="/login">Login</Link>{' '}
+            to post.
           </p>
         ) : null}
         {error ? <p className="error-text">{error}</p> : null}
         {loading ? <p className="muted">Loading...</p> : null}
-        {!loading && threads.length === 0 ? <p className="muted">No threads yet.</p> : null}
+        {!loading && filteredBoards.length === 0 ? (
+          <p className="muted">{search ? 'No matching boards.' : 'No boards yet.'}</p>
+        ) : null}
       </div>
 
-      <ul className="thread-list">
-        {threads.map((thread, index) => (
-          <li
-            key={thread.id}
-            className="thread-item thread-item--animated"
+      <div className="board-grid">
+        {filteredBoards.map((board, index) => (
+          <Link
+            key={board.id}
+            to={`/boards/${board.slug}`}
+            className="board-card thread-item--animated"
             style={{ '--stagger': index }}
           >
-            <h3>
-              <Link to={`/threads/${thread.id}`}>{thread.title}</Link>
-            </h3>
-            <p className="muted">by {thread.authorName}</p>
-            <VoteControls
-              thread={thread}
-              user={user}
-              disabled={votingThreadId === thread.id}
-              onVote={(vote) => onVote(thread.id, vote)}
-            />
-            {user?.isAdmin ? (
-              <button
-                className="btn btn--secondary"
-                type="button"
-                onClick={() => onDelete(thread.id)}
-                disabled={deletingThreadId === thread.id}
-              >
-                Delete
-              </button>
-            ) : null}
-          </li>
+            <h3>{board.name}</h3>
+            <p className="muted">/{board.slug}</p>
+            <p className="muted">{board.description || 'No description yet.'}</p>
+            <p className="muted">
+              Owner:{' '}
+              {board.creatorUserId ? (
+                <Link to={`/users/${board.creatorUserId}`}>{board.createdByName || 'Unknown'}</Link>
+              ) : (
+                board.createdByName || 'System'
+              )}
+            </p>
+            <p className="muted">
+              {board.threadCount} thread{board.threadCount === 1 ? '' : 's'}
+            </p>
+            <p className="muted">
+              Last activity:{' '}
+              {board.latestThreadAt ? new Date(board.latestThreadAt).toLocaleString() : 'No activity yet'}
+            </p>
+          </Link>
         ))}
-      </ul>
+      </div>
     </section>
   );
 }

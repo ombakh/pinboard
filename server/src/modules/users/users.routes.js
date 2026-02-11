@@ -62,6 +62,79 @@ router.get('/me/threads', requireAuth, (req, res) => {
   }
 });
 
+router.get('/:userId', (req, res) => {
+  const userId = Number(req.params.userId);
+  if (!Number.isInteger(userId) || userId <= 0) {
+    return res.status(400).json({ message: 'Invalid user id' });
+  }
+
+  try {
+    const db = getDb();
+    const user = db
+      .prepare(
+        `SELECT
+          id,
+          name,
+          created_at AS createdAt
+         FROM users
+         WHERE id = ?`
+      )
+      .get(userId);
+
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+
+    const posts = db
+      .prepare(
+        `SELECT
+          t.id,
+          t.title,
+          t.body,
+          t.created_at AS createdAt,
+          t.board_id AS boardId,
+          b.slug AS boardSlug,
+          b.name AS boardName
+         FROM threads t
+         LEFT JOIN boards b ON b.id = t.board_id
+         WHERE t.author_user_id = ?
+         ORDER BY datetime(t.created_at) DESC`
+      )
+      .all(userId)
+      .map((post) => ({
+        ...post,
+        boardId: post.boardId ? Number(post.boardId) : null
+      }));
+
+    const comments = db
+      .prepare(
+        `SELECT
+          r.id,
+          r.body,
+          r.created_at AS createdAt,
+          r.thread_id AS threadId,
+          t.title AS threadTitle,
+          t.board_id AS boardId,
+          b.slug AS boardSlug,
+          b.name AS boardName
+         FROM thread_responses r
+         LEFT JOIN threads t ON t.id = r.thread_id
+         LEFT JOIN boards b ON b.id = t.board_id
+         WHERE r.user_id = ?
+         ORDER BY datetime(r.created_at) DESC`
+      )
+      .all(userId)
+      .map((comment) => ({
+        ...comment,
+        boardId: comment.boardId ? Number(comment.boardId) : null
+      }));
+
+    return res.json({ user, posts, comments });
+  } catch (_error) {
+    return res.status(500).json({ message: 'Could not load user profile' });
+  }
+});
+
 router.get('/', requireAuth, requireAdmin, (_req, res) => {
   try {
     const db = getDb();
