@@ -3,6 +3,11 @@ const { getDb } = require('../../db');
 const requireAuth = require('../../middlewares/requireAuth');
 const { TOKEN_COOKIE_NAME, verifyUserToken } = require('../../auth/token');
 const { getBoardRole } = require('../../utils/boardPermissions');
+const {
+  NOTIFICATION_TYPES,
+  createNotification,
+  createMentionNotifications
+} = require('../notifications/notifications.service');
 
 const router = express.Router();
 
@@ -50,8 +55,8 @@ function buildThreadSelect() {
         ),
         t.created_at
       ) AS latestActivityAt,
-      COALESCE(SUM(CASE WHEN v.vote = 1 AND v.user_id != t.author_user_id THEN 1 ELSE 0 END), 0) AS upvotes,
-      COALESCE(SUM(CASE WHEN v.vote = -1 AND v.user_id != t.author_user_id THEN 1 ELSE 0 END), 0) AS downvotes,
+      COALESCE(SUM(CASE WHEN v.vote = 1 THEN 1 ELSE 0 END), 0) AS upvotes,
+      COALESCE(SUM(CASE WHEN v.vote = -1 THEN 1 ELSE 0 END), 0) AS downvotes,
       MAX(CASE WHEN v.user_id = ? THEN v.vote ELSE 0 END) AS userVote
     FROM threads t
     LEFT JOIN boards b ON b.id = t.board_id
@@ -68,8 +73,8 @@ function buildResponseSelect() {
       r.author_name AS authorName,
       r.body,
       r.created_at AS createdAt,
-      COALESCE(SUM(CASE WHEN rv.vote = 1 AND rv.user_id != r.user_id THEN 1 ELSE 0 END), 0) AS upvotes,
-      COALESCE(SUM(CASE WHEN rv.vote = -1 AND rv.user_id != r.user_id THEN 1 ELSE 0 END), 0) AS downvotes,
+      COALESCE(SUM(CASE WHEN rv.vote = 1 THEN 1 ELSE 0 END), 0) AS upvotes,
+      COALESCE(SUM(CASE WHEN rv.vote = -1 THEN 1 ELSE 0 END), 0) AS downvotes,
       MAX(CASE WHEN rv.user_id = ? THEN rv.vote ELSE 0 END) AS userVote
     FROM thread_responses r
     LEFT JOIN response_votes rv ON rv.response_id = r.id
@@ -184,6 +189,17 @@ router.post('/', requireAuth, (req, res) => {
       )
       .run(title, body, boardId, authorName, authorUserId);
 
+    createMentionNotifications({
+      db,
+      text: `${title}\n${body}`,
+      actorUserId: authorUserId,
+      actorName: authorName,
+      entityType: 'thread',
+      entityId: Number(result.lastInsertRowid),
+      threadId: Number(result.lastInsertRowid),
+      contextLabel: 'a thread'
+    });
+
     const thread = db
       .prepare(
         `${buildThreadSelect()}
@@ -222,15 +238,10 @@ router.post('/:threadId/vote', requireAuth, (req, res) => {
 
   try {
     const db = getDb();
-    const threadExists = db
-      .prepare('SELECT id, author_user_id AS authorUserId FROM threads WHERE id = ?')
-      .get(threadId);
+    const threadExists = db.prepare('SELECT id FROM threads WHERE id = ?').get(threadId);
 
     if (!threadExists) {
       return res.status(404).json({ message: 'Thread not found' });
-    }
-    if (threadExists.authorUserId && Number(threadExists.authorUserId) === userId) {
-      return res.status(400).json({ message: 'You cannot vote on your own thread' });
     }
 
     db.prepare(
@@ -340,8 +351,14 @@ router.post('/:threadId/responses', requireAuth, (req, res) => {
 
   try {
     const db = getDb();
-    const exists = db.prepare('SELECT id FROM threads WHERE id = ?').get(threadId);
-    if (!exists) {
+    const thread = db
+      .prepare(
+        `SELECT id, title, author_user_id AS authorUserId
+         FROM threads
+         WHERE id = ?`
+      )
+      .get(threadId);
+    if (!thread) {
       return res.status(404).json({ message: 'Thread not found' });
     }
 
@@ -359,6 +376,33 @@ router.post('/:threadId/responses', requireAuth, (req, res) => {
          GROUP BY r.id`
       )
       .get(req.authUser.id, result.lastInsertRowid);
+
+    const notifiedUserIds = [];
+    const threadAuthorId = Number(thread.authorUserId);
+    if (Number.isInteger(threadAuthorId) && threadAuthorId > 0 && threadAuthorId !== req.authUser.id) {
+      createNotification(db, {
+        userId: threadAuthorId,
+        actorUserId: req.authUser.id,
+        type: NOTIFICATION_TYPES.THREAD_RESPONSE,
+        entityType: 'thread_response',
+        entityId: Number(result.lastInsertRowid),
+        threadId,
+        message: `${req.authUser.name || 'Someone'} replied to your thread`
+      });
+      notifiedUserIds.push(threadAuthorId);
+    }
+
+    createMentionNotifications({
+      db,
+      text: body,
+      actorUserId: req.authUser.id,
+      actorName: req.authUser.name,
+      entityType: 'thread_response',
+      entityId: Number(result.lastInsertRowid),
+      threadId,
+      excludeUserIds: notifiedUserIds,
+      contextLabel: 'a reply'
+    });
 
     return res.status(201).json({
       response: {
@@ -394,14 +438,11 @@ router.post('/:threadId/responses/:responseId/vote', requireAuth, (req, res) => 
   try {
     const db = getDb();
     const responseExists = db
-      .prepare('SELECT id, user_id AS authorUserId FROM thread_responses WHERE id = ? AND thread_id = ?')
+      .prepare('SELECT id FROM thread_responses WHERE id = ? AND thread_id = ?')
       .get(responseId, threadId);
 
     if (!responseExists) {
       return res.status(404).json({ message: 'Response not found' });
-    }
-    if (Number(responseExists.authorUserId) === userId) {
-      return res.status(400).json({ message: 'You cannot vote on your own response' });
     }
 
     db.prepare(

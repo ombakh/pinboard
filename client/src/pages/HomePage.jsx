@@ -1,103 +1,292 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { fetchBoards } from '../services/threadService.js';
+import TiltCard from '../components/TiltCard.jsx';
+import { fetchThreads } from '../services/threadService.js';
+import { fetchFollowingThreads } from '../services/userService.js';
 
 function HomePage({ user }) {
-  const [boards, setBoards] = useState([]);
-  const [search, setSearch] = useState('');
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
+  const [trendingThreads, setTrendingThreads] = useState([]);
+  const [trendingSearch, setTrendingSearch] = useState('');
+  const [trendingSort, setTrendingSort] = useState('top');
+  const [trendingLoading, setTrendingLoading] = useState(true);
+  const [trendingError, setTrendingError] = useState('');
+
+  const [feedTab, setFeedTab] = useState('trending');
+  const [followingThreads, setFollowingThreads] = useState([]);
+  const [followingSearch, setFollowingSearch] = useState('');
+  const [followingSort, setFollowingSort] = useState('new');
+  const [followingLoading, setFollowingLoading] = useState(false);
+  const [followingError, setFollowingError] = useState('');
+
+  useEffect(() => {
+    if (!user) {
+      setFeedTab('trending');
+    }
+  }, [user]);
 
   useEffect(() => {
     let active = true;
 
-    async function loadBoards() {
+    async function loadTrendingFeed() {
+      if (feedTab !== 'trending') {
+        return;
+      }
+
+      setTrendingLoading(true);
+      setTrendingError('');
+
       try {
-        const boardList = await fetchBoards();
+        const threads = await fetchThreads({
+          search: trendingSearch,
+          sort: trendingSort
+        });
         if (active) {
-          setBoards(boardList);
+          setTrendingThreads(threads);
         }
-      } catch (_error) {
+      } catch (loadError) {
         if (active) {
-          setError('Could not load boards');
+          setTrendingError(loadError.message || 'Could not load trending posts');
         }
       } finally {
         if (active) {
-          setLoading(false);
+          setTrendingLoading(false);
         }
       }
     }
 
-    loadBoards();
+    const timer = setTimeout(loadTrendingFeed, 180);
     return () => {
       active = false;
+      clearTimeout(timer);
     };
-  }, []);
+  }, [feedTab, trendingSearch, trendingSort]);
 
-  const filteredBoards = useMemo(() => {
-    const q = search.trim().toLowerCase();
-    if (!q) {
-      return boards;
+  useEffect(() => {
+    let active = true;
+
+    async function loadFollowingFeed() {
+      if (!user || feedTab !== 'following') {
+        return;
+      }
+
+      setFollowingLoading(true);
+      setFollowingError('');
+
+      try {
+        const threads = await fetchFollowingThreads({
+          search: followingSearch,
+          sort: followingSort
+        });
+        if (active) {
+          setFollowingThreads(threads);
+        }
+      } catch (loadError) {
+        if (active) {
+          setFollowingError(loadError.message || 'Could not load following feed');
+        }
+      } finally {
+        if (active) {
+          setFollowingLoading(false);
+        }
+      }
     }
-    return boards.filter(
-      (board) =>
-        board.name.toLowerCase().includes(q) ||
-        (board.description || '').toLowerCase().includes(q) ||
-        board.slug.toLowerCase().includes(q)
+
+    const timer = setTimeout(loadFollowingFeed, 180);
+
+    return () => {
+      active = false;
+      clearTimeout(timer);
+    };
+  }, [user, feedTab, followingSearch, followingSort]);
+
+  function sortLabel(sort) {
+    if (sort === 'top') {
+      return 'Top';
+    }
+    if (sort === 'active') {
+      return 'Most Active';
+    }
+    if (sort === 'discussed') {
+      return 'Most Discussed';
+    }
+    return 'Newest';
+  }
+
+  const trendingAverageScore = useMemo(() => {
+    if (trendingThreads.length === 0) {
+      return 0;
+    }
+    const total = trendingThreads.reduce(
+      (sum, thread) => sum + ((thread.upvotes || 0) - (thread.downvotes || 0)),
+      0
     );
-  }, [boards, search]);
+    return Math.round(total / trendingThreads.length);
+  }, [trendingThreads]);
+
+  const followingAverageScore = useMemo(() => {
+    if (followingThreads.length === 0) {
+      return 0;
+    }
+    const total = followingThreads.reduce(
+      (sum, thread) => sum + ((thread.upvotes || 0) - (thread.downvotes || 0)),
+      0
+    );
+    return Math.round(total / followingThreads.length);
+  }, [followingThreads]);
+
+  const currentCount = feedTab === 'trending' ? trendingThreads.length : followingThreads.length;
+  const currentAverageScore =
+    feedTab === 'trending' ? trendingAverageScore : followingAverageScore;
+  const currentSort = feedTab === 'trending' ? trendingSort : followingSort;
 
   return (
-    <section>
-      <div className="card section-header-card">
-        <h1 className="page-title">Communities</h1>
-        <input
-          value={search}
-          onChange={(event) => setSearch(event.target.value)}
-          placeholder="Search boards by name, slug, or description..."
-        />
-        {!user ? (
-          <p className="muted">
-            Browse communities and open threads inside each board. <Link to="/login">Login</Link>{' '}
-            to post.
-          </p>
-        ) : null}
-        {error ? <p className="error-text">{error}</p> : null}
-        {loading ? <p className="muted">Loading...</p> : null}
-        {!loading && filteredBoards.length === 0 ? (
-          <p className="muted">{search ? 'No matching boards.' : 'No boards yet.'}</p>
-        ) : null}
-      </div>
+    <section className="home-page">
+      <TiltCard as="div" className="card section-header-card card--hero">
+        <h1 className="page-title">{feedTab === 'following' ? 'Following Feed' : 'Trending Posts'}</h1>
+        <div className="hero-metrics">
+          <div className="hero-metric">
+            <span>Showing</span>
+            <strong>{currentCount}</strong>
+          </div>
+          <div className="hero-metric">
+            <span>Avg Score</span>
+            <strong>{currentAverageScore}</strong>
+          </div>
+          <div className="hero-metric">
+            <span>Sort</span>
+            <strong>{sortLabel(currentSort)}</strong>
+          </div>
+        </div>
 
-      <div className="board-grid home-board-grid">
-        {filteredBoards.map((board, index) => (
-          <Link
-            key={board.id}
-            to={`/boards/${board.slug}`}
-            className="board-card thread-item--animated"
-            style={{ '--stagger': index }}
-          >
-            <h3>{board.name}</h3>
-            <p className="muted">/{board.slug}</p>
-            <p className="muted">{board.description || 'No description yet.'}</p>
-            <p className="muted">
-              Owner:{' '}
-              {board.creatorUserId ? (
-                <Link to={`/users/${board.creatorUserId}`}>{board.createdByName || 'Unknown'}</Link>
-              ) : (
-                board.createdByName || 'System'
-              )}
-            </p>
-            <p className="muted">
-              {board.threadCount} thread{board.threadCount === 1 ? '' : 's'}
-            </p>
-            <p className="muted">
-              Last activity:{' '}
-              {board.latestThreadAt ? new Date(board.latestThreadAt).toLocaleString() : 'No activity yet'}
-            </p>
-          </Link>
-        ))}
-      </div>
+        {user ? (
+          <div className="board-tabs">
+            <button
+              className={`btn btn--secondary ${feedTab === 'trending' ? 'is-selected' : ''}`}
+              type="button"
+              onClick={() => setFeedTab('trending')}
+            >
+              Trending
+            </button>
+            <button
+              className={`btn btn--secondary ${feedTab === 'following' ? 'is-selected' : ''}`}
+              type="button"
+              onClick={() => setFeedTab('following')}
+            >
+              Following
+            </button>
+          </div>
+        ) : null}
+
+        {feedTab === 'trending' ? (
+          <>
+            <p className="muted">Posts people are engaging with right now.</p>
+            <input
+              value={trendingSearch}
+              onChange={(event) => setTrendingSearch(event.target.value)}
+              placeholder="Search trending posts..."
+            />
+            <select value={trendingSort} onChange={(event) => setTrendingSort(event.target.value)}>
+              <option value="top">Top</option>
+              <option value="active">Most Active</option>
+              <option value="discussed">Most Discussed</option>
+              <option value="new">Newest</option>
+            </select>
+            {!user ? <p className="muted"><Link to="/login">Login</Link> to unlock your following feed.</p> : null}
+            {trendingError ? <p className="error-text">{trendingError}</p> : null}
+            {trendingLoading ? <p className="muted">Loading trending posts...</p> : null}
+            {!trendingLoading && trendingThreads.length === 0 ? (
+              <p className="muted">{trendingSearch ? 'No matching trending posts.' : 'No trending posts yet.'}</p>
+            ) : null}
+          </>
+        ) : (
+          <>
+            <p className="muted">Threads from people you follow.</p>
+            <input
+              value={followingSearch}
+              onChange={(event) => setFollowingSearch(event.target.value)}
+              placeholder="Search in following feed..."
+            />
+            <select value={followingSort} onChange={(event) => setFollowingSort(event.target.value)}>
+              <option value="new">Newest</option>
+              <option value="top">Top</option>
+              <option value="active">Most Active</option>
+              <option value="discussed">Most Discussed</option>
+            </select>
+            {followingError ? <p className="error-text">{followingError}</p> : null}
+            {followingLoading ? <p className="muted">Loading following feed...</p> : null}
+            {!followingLoading && followingThreads.length === 0 ? (
+              <p className="muted">
+                {followingSearch
+                  ? 'No matching threads from people you follow.'
+                  : 'No threads yet. Follow people from their profiles to build your feed.'}
+              </p>
+            ) : null}
+          </>
+        )}
+      </TiltCard>
+
+      {feedTab === 'trending' ? (
+        <div className="home-trending-scroll">
+          <ul className="thread-list home-trending-list">
+            {trendingThreads.map((thread, index) => (
+              <TiltCard
+                as="li"
+                key={thread.id}
+                className="thread-item thread-item--animated"
+                style={{ '--stagger': index }}
+              >
+                <h3>
+                  <Link to={`/threads/${thread.id}`}>{thread.title}</Link>
+                </h3>
+                <p className="muted">
+                  by{' '}
+                  {thread.authorUserId ? (
+                    <Link to={`/users/${thread.authorUserId}`}>{thread.authorName}</Link>
+                  ) : (
+                    thread.authorName
+                  )}
+                  {' • '}
+                  {thread.boardSlug ? <Link to={`/boards/${thread.boardSlug}`}>/{thread.boardSlug}</Link> : 'No board'}
+                </p>
+                <p className="muted">
+                  #{index + 1} trending • Score: {(thread.upvotes || 0) - (thread.downvotes || 0)} •{' '}
+                  {thread.responseCount || 0} responses • last activity{' '}
+                  {new Date(thread.latestActivityAt || thread.createdAt).toLocaleString()}
+                </p>
+              </TiltCard>
+            ))}
+          </ul>
+        </div>
+      ) : (
+        <ul className="thread-list home-following-list">
+          {followingThreads.map((thread, index) => (
+            <TiltCard
+              as="li"
+              key={thread.id}
+              className="thread-item thread-item--animated"
+              style={{ '--stagger': index }}
+            >
+              <h3>
+                <Link to={`/threads/${thread.id}`}>{thread.title}</Link>
+              </h3>
+              <p className="muted">
+                by{' '}
+                {thread.authorUserId ? (
+                  <Link to={`/users/${thread.authorUserId}`}>{thread.authorName}</Link>
+                ) : (
+                  thread.authorName
+                )}
+                {' • '}
+                {thread.boardSlug ? <Link to={`/boards/${thread.boardSlug}`}>/{thread.boardSlug}</Link> : 'No board'}
+              </p>
+              <p className="muted">
+                Score: {(thread.upvotes || 0) - (thread.downvotes || 0)} • {thread.responseCount || 0}{' '}
+                responses • last activity {new Date(thread.latestActivityAt || thread.createdAt).toLocaleString()}
+              </p>
+            </TiltCard>
+          ))}
+        </ul>
+      )}
     </section>
   );
 }

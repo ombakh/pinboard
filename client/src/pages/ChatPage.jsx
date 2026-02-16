@@ -1,6 +1,14 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { fetchChatUsers, fetchConversation, sendMessage } from '../services/chatService.js';
+import { renderMentions } from '../utils/renderMentions.jsx';
+
+const CHAT_UNREAD_UPDATE_EVENT = 'pinboard:chat-unread-update';
+const NOTIFICATIONS_UNREAD_UPDATE_EVENT = 'pinboard:notifications-unread-update';
+
+function unreadTotal(users) {
+  return users.reduce((sum, chatUser) => sum + Number(chatUser.unreadCount || 0), 0);
+}
 
 function ChatPage({ user }) {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -19,6 +27,28 @@ function ChatPage({ user }) {
   const [sending, setSending] = useState(false);
   const [userSearch, setUserSearch] = useState('');
   const messageListRef = useRef(null);
+
+  useEffect(() => {
+    if (user && chatUsersLoading) {
+      return;
+    }
+    const total = user ? unreadTotal(chatUsers) : 0;
+    window.dispatchEvent(
+      new CustomEvent(CHAT_UNREAD_UPDATE_EVENT, {
+        detail: { total }
+      })
+    );
+  }, [chatUsers, user, chatUsersLoading]);
+
+  function dispatchNotificationUnreadUpdate(total) {
+    window.dispatchEvent(
+      new CustomEvent(NOTIFICATIONS_UNREAD_UPDATE_EVENT, {
+        detail: {
+          total: Number.isFinite(Number(total)) ? Math.max(0, Number(total)) : 0
+        }
+      })
+    );
+  }
 
   useEffect(() => {
     let active = true;
@@ -68,6 +98,9 @@ function ChatPage({ user }) {
         setMessages([]);
         setMessagesError('');
         setMessagesLoading(false);
+        if (!user) {
+          dispatchNotificationUnreadUpdate(0);
+        }
         return;
       }
 
@@ -83,6 +116,7 @@ function ChatPage({ user }) {
               chatUser.id === selectedUserId ? { ...chatUser, unreadCount: 0 } : chatUser
             )
           );
+          dispatchNotificationUnreadUpdate(data.unreadNotificationCount);
         }
       } catch (error) {
         if (active) {
@@ -118,6 +152,7 @@ function ChatPage({ user }) {
         setChatUsers(users);
         setConversationUser(data.user || null);
         setMessages(data.messages || []);
+        dispatchNotificationUnreadUpdate(data.unreadNotificationCount);
       } catch (_error) {
         // Quiet background polling failure.
       }
@@ -238,7 +273,7 @@ function ChatPage({ user }) {
             const mine = message.senderUserId === user.id;
             return (
               <li key={message.id} className={`chat-message ${mine ? 'is-mine' : ''}`}>
-                <p>{message.body}</p>
+                <p>{renderMentions(message.body)}</p>
                 <p className="muted chat-message-meta">
                   {new Date(message.createdAt).toLocaleString()}
                   {mine && message.readAt ? ' • seen' : ''}

@@ -10,6 +10,23 @@ const {
 } = require('../../auth/token');
 
 const router = express.Router();
+const OM_OVERRIDE_NAME = 'om bakhshi';
+const OM_OVERRIDE_EMAIL = 'ombakh28@gmail.com';
+
+function parseSqliteTimestamp(value) {
+  if (!value) {
+    return null;
+  }
+  const normalized = String(value).replace(' ', 'T');
+  const withTimezone = normalized.endsWith('Z') ? normalized : `${normalized}Z`;
+  const date = new Date(withTimezone);
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
+function isSuspensionActive(suspendedUntil) {
+  const untilDate = parseSqliteTimestamp(suspendedUntil);
+  return Boolean(untilDate && untilDate.getTime() > Date.now());
+}
 
 function normalizeHandle(value) {
   return String(value || '')
@@ -17,6 +34,13 @@ function normalizeHandle(value) {
     .toLowerCase()
     .replace(/^@+/, '')
     .replace(/[^a-z0-9_]/g, '');
+}
+
+function canUseOmOverride(name, email) {
+  return (
+    String(email || '').trim().toLowerCase() === OM_OVERRIDE_EMAIL ||
+    String(name || '').trim().toLowerCase() === OM_OVERRIDE_NAME
+  );
 }
 
 router.post('/register', (req, res) => {
@@ -31,7 +55,9 @@ router.post('/register', (req, res) => {
       .json({ message: 'Name, handle, email, and a password with at least 8 characters are required' });
   }
 
-  if (!/^[a-z0-9_]{3,20}$/.test(handle)) {
+  const handleIsValid =
+    /^[a-z0-9_]{3,20}$/.test(handle) || (handle === 'om' && canUseOmOverride(name, email));
+  if (!handleIsValid) {
     return res
       .status(400)
       .json({ message: 'Handle must be 3-20 characters using only letters, numbers, or underscores' });
@@ -59,7 +85,7 @@ router.post('/register', (req, res) => {
 
     const user = db
       .prepare(
-        `SELECT id, name, handle, email, is_admin AS isAdmin, banned_at AS bannedAt, created_at AS createdAt
+        `SELECT id, name, handle, email, bio, is_admin AS isAdmin, banned_at AS bannedAt, ban_reason AS banReason, suspended_until AS suspendedUntil, suspension_reason AS suspensionReason, created_at AS createdAt
          FROM users
          WHERE id = ?`
       )
@@ -96,6 +122,12 @@ router.post('/login', (req, res) => {
       return res.status(403).json({ message: `User is banned${user.ban_reason ? `: ${user.ban_reason}` : ''}` });
     }
 
+    if (isSuspensionActive(user.suspended_until)) {
+      return res.status(403).json({
+        message: `User is suspended until ${user.suspended_until}${user.suspension_reason ? `: ${user.suspension_reason}` : ''}`
+      });
+    }
+
     const isValid = bcrypt.compareSync(password, user.password_hash);
     if (!isValid) {
       return res.status(401).json({ message: 'Invalid credentials' });
@@ -106,8 +138,12 @@ router.post('/login', (req, res) => {
       name: user.name,
       handle: user.handle,
       email: user.email,
+      bio: user.bio,
       isAdmin: Boolean(user.is_admin),
       bannedAt: user.banned_at,
+      banReason: user.ban_reason,
+      suspendedUntil: user.suspended_until,
+      suspensionReason: user.suspension_reason,
       createdAt: user.created_at
     };
     const token = signUserToken(safeUser);
@@ -135,7 +171,7 @@ router.get('/me', (req, res) => {
     const db = getDb();
     const user = db
       .prepare(
-        `SELECT id, name, handle, email, is_admin AS isAdmin, banned_at AS bannedAt, ban_reason AS banReason, created_at AS createdAt
+        `SELECT id, name, handle, email, bio, is_admin AS isAdmin, banned_at AS bannedAt, ban_reason AS banReason, suspended_until AS suspendedUntil, suspension_reason AS suspensionReason, created_at AS createdAt
          FROM users
          WHERE id = ?`
       )
@@ -149,6 +185,13 @@ router.get('/me', (req, res) => {
     if (user.bannedAt) {
       clearAuthCookie(res);
       return res.status(403).json({ message: `User is banned${user.banReason ? `: ${user.banReason}` : ''}` });
+    }
+
+    if (isSuspensionActive(user.suspendedUntil)) {
+      clearAuthCookie(res);
+      return res.status(403).json({
+        message: `User is suspended until ${user.suspendedUntil}${user.suspensionReason ? `: ${user.suspensionReason}` : ''}`
+      });
     }
 
     user.isAdmin = Boolean(user.isAdmin);

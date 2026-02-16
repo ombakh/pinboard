@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useNavigate } from 'react-router-dom';
 import { useParams } from 'react-router-dom';
+import TiltCard from '../components/TiltCard.jsx';
 import VoteControls from '../components/VoteControls.jsx';
 import {
   createThreadResponse,
@@ -11,6 +12,7 @@ import {
   voteThreadResponse,
   voteThread
 } from '../services/threadService.js';
+import { renderMentions } from '../utils/renderMentions.jsx';
 
 function ThreadPage({ user }) {
   const navigate = useNavigate();
@@ -133,7 +135,7 @@ function ThreadPage({ user }) {
   }
 
   return (
-    <article className="card">
+    <TiltCard as="article" className="card">
       {thread.boardSlug ? (
         <p className="muted">
           <Link to={`/boards/${thread.boardSlug}`}>/{thread.boardSlug}</Link>
@@ -151,7 +153,7 @@ function ThreadPage({ user }) {
           on {new Date(thread.createdAt).toLocaleString()}
         </small>
       </p>
-      <p className="thread-body">{thread.body}</p>
+      <p className="thread-body">{renderMentions(thread.body)}</p>
       <VoteControls thread={thread} user={user} onVote={onVote} disabled={voting} />
       {user?.isAdmin ? (
         <p>
@@ -169,7 +171,7 @@ function ThreadPage({ user }) {
           <form className="form-grid" onSubmit={onRespond}>
             <textarea
               name="responseBody"
-              placeholder="Write a response..."
+              placeholder="Write a response... (use @handle to mention)"
               value={responseBody}
               onChange={(event) => setResponseBody(event.target.value)}
               rows={4}
@@ -188,8 +190,8 @@ function ThreadPage({ user }) {
 
         <ul className="response-list">
           {responses.map((response) => (
-            <li key={response.id} className="response-item">
-              <p className="thread-body">{response.body}</p>
+            <TiltCard as="li" key={response.id} className="response-item">
+              <p className="thread-body">{renderMentions(response.body)}</p>
               <VoteControls
                 thread={response}
                 user={user}
@@ -206,11 +208,11 @@ function ThreadPage({ user }) {
                   on {new Date(response.createdAt).toLocaleString()}
                 </small>
               </p>
-            </li>
+            </TiltCard>
           ))}
         </ul>
       </section>
-    </article>
+    </TiltCard>
   );
 }
 
