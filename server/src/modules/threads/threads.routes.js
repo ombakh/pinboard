@@ -10,6 +10,45 @@ const {
 } = require('../notifications/notifications.service');
 
 const router = express.Router();
+const MAX_THREAD_IMAGE_BYTES = 3 * 1024 * 1024;
+const ALLOWED_THREAD_IMAGE_MIME_TYPES = new Set([
+  'image/png',
+  'image/jpeg',
+  'image/webp',
+  'image/gif'
+]);
+
+function normalizeThreadImageDataUrl(value) {
+  if (value == null) {
+    return null;
+  }
+
+  const raw = String(value).trim();
+  if (!raw) {
+    return null;
+  }
+
+  const match = raw.match(/^data:(image\/[a-z0-9.+-]+);base64,([a-z0-9+/=\s]+)$/i);
+  if (!match) {
+    throw new Error('Post image must be a valid image upload');
+  }
+
+  const mimeType = String(match[1] || '').toLowerCase();
+  if (!ALLOWED_THREAD_IMAGE_MIME_TYPES.has(mimeType)) {
+    throw new Error('Post image must be PNG, JPG, WEBP, or GIF');
+  }
+
+  const base64Data = String(match[2] || '').replace(/\s+/g, '');
+  const byteLength = Buffer.byteLength(base64Data, 'base64');
+  if (!Number.isFinite(byteLength) || byteLength <= 0) {
+    throw new Error('Post image appears invalid');
+  }
+  if (byteLength > MAX_THREAD_IMAGE_BYTES) {
+    throw new Error('Post image must be 3MB or smaller');
+  }
+
+  return `data:${mimeType};base64,${base64Data}`;
+}
 
 function getViewerId(req) {
   const token = req.cookies[TOKEN_COOKIE_NAME];
@@ -31,6 +70,7 @@ function buildThreadSelect() {
       t.id,
       t.title,
       t.body,
+      t.image_url AS imageUrl,
       t.board_id AS boardId,
       b.name AS boardName,
       b.slug AS boardSlug,
@@ -168,8 +208,15 @@ router.post('/', requireAuth, (req, res) => {
   const title = (req.body.title || '').trim();
   const body = (req.body.body || '').trim();
   const boardId = Number(req.body.boardId);
+  let imageUrl = null;
   const authorName = req.authUser.name || 'Member';
   const authorUserId = req.authUser.id;
+
+  try {
+    imageUrl = normalizeThreadImageDataUrl(req.body.imageUrl);
+  } catch (error) {
+    return res.status(400).json({ message: error.message || 'Invalid post image upload' });
+  }
 
   if (!title || !body || !Number.isInteger(boardId) || boardId <= 0) {
     return res.status(400).json({ message: 'Title, body, and board are required' });
@@ -184,10 +231,10 @@ router.post('/', requireAuth, (req, res) => {
 
     const result = db
       .prepare(
-        `INSERT INTO threads (title, body, board_id, author_name, author_user_id)
-         VALUES (?, ?, ?, ?, ?)`
+        `INSERT INTO threads (title, body, image_url, board_id, author_name, author_user_id)
+         VALUES (?, ?, ?, ?, ?, ?)`
       )
-      .run(title, body, boardId, authorName, authorUserId);
+      .run(title, body, imageUrl, boardId, authorName, authorUserId);
 
     createMentionNotifications({
       db,

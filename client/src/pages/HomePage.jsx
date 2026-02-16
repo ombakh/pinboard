@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
+import SharePostButton from '../components/SharePostButton.jsx';
 import TiltCard from '../components/TiltCard.jsx';
 import { fetchThreads } from '../services/threadService.js';
 import { fetchFollowingThreads } from '../services/userService.js';
@@ -240,9 +241,12 @@ function HomePage({ user }) {
                 className="thread-item thread-item--animated"
                 style={{ '--stagger': index }}
               >
-                <h3>
-                  <Link to={`/threads/${thread.id}`}>{thread.title}</Link>
-                </h3>
+                <div className="thread-item-head">
+                  <h3>
+                    <Link to={`/threads/${thread.id}`}>{thread.title}</Link>
+                  </h3>
+                  {user ? <SharePostButton threadId={thread.id} threadTitle={thread.title} /> : null}
+                </div>
                 <p className="muted">
                   by{' '}
                   {thread.authorUserId ? (
@@ -253,21 +257,19 @@ function HomePage({ user }) {
                   {' • '}
                   {thread.boardSlug ? <Link to={`/boards/${thread.boardSlug}`}>/{thread.boardSlug}</Link> : 'No board'}
                 </p>
+                {thread.imageUrl ? (
+                  <img
+                    className="thread-image"
+                    src={thread.imageUrl}
+                    alt={`Image attached to ${thread.title}`}
+                    loading="lazy"
+                  />
+                ) : null}
                 <p className="muted">
                   #{index + 1} trending • Score: {(thread.upvotes || 0) - (thread.downvotes || 0)} •{' '}
                   {thread.responseCount || 0} responses • last activity{' '}
                   {formatDateTime(thread.latestActivityAt || thread.createdAt, user?.timezone)}
                 </p>
-                {user ? (
-                  <div className="thread-actions">
-                    <Link
-                      className="btn btn--secondary"
-                      to={`/messages?shareThreadId=${thread.id}&shareThreadTitle=${encodeURIComponent(thread.title)}`}
-                    >
-                      Share
-                    </Link>
-                  </div>
-                ) : null}
               </TiltCard>
             ))}
           </ul>
@@ -281,9 +283,12 @@ function HomePage({ user }) {
               className="thread-item thread-item--animated"
               style={{ '--stagger': index }}
             >
-              <h3>
-                <Link to={`/threads/${thread.id}`}>{thread.title}</Link>
-              </h3>
+              <div className="thread-item-head">
+                <h3>
+                  <Link to={`/threads/${thread.id}`}>{thread.title}</Link>
+                </h3>
+                {user ? <SharePostButton threadId={thread.id} threadTitle={thread.title} /> : null}
+              </div>
               <p className="muted">
                 by{' '}
                 {thread.authorUserId ? (
@@ -294,21 +299,19 @@ function HomePage({ user }) {
                 {' • '}
                 {thread.boardSlug ? <Link to={`/boards/${thread.boardSlug}`}>/{thread.boardSlug}</Link> : 'No board'}
               </p>
+              {thread.imageUrl ? (
+                <img
+                  className="thread-image"
+                  src={thread.imageUrl}
+                  alt={`Image attached to ${thread.title}`}
+                  loading="lazy"
+                />
+              ) : null}
               <p className="muted">
                 Score: {(thread.upvotes || 0) - (thread.downvotes || 0)} • {thread.responseCount || 0}{' '}
                 responses • last activity{' '}
                 {formatDateTime(thread.latestActivityAt || thread.createdAt, user?.timezone)}
               </p>
-              {user ? (
-                <div className="thread-actions">
-                  <Link
-                    className="btn btn--secondary"
-                    to={`/messages?shareThreadId=${thread.id}&shareThreadTitle=${encodeURIComponent(thread.title)}`}
-                  >
-                    Share
-                  </Link>
-                </div>
-              ) : null}
             </TiltCard>
           ))}
         </ul>

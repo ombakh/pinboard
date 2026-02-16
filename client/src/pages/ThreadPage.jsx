@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { useNavigate } from 'react-router-dom';
 import { useParams } from 'react-router-dom';
 import TiltCard from '../components/TiltCard.jsx';
+import SharePostButton from '../components/SharePostButton.jsx';
 import VoteControls from '../components/VoteControls.jsx';
 import {
   createThreadResponse,
@@ -74,10 +75,6 @@ function ThreadPage({ user }) {
   if (!thread) {
     return <p className="muted">Thread not found.</p>;
   }
-
-  const shareThreadTo = `/messages?shareThreadId=${thread.id}&shareThreadTitle=${encodeURIComponent(
-    thread.title
-  )}`;
 
   async function onVote(vote) {
     setVoting(true);
@@ -193,7 +190,10 @@ function ThreadPage({ user }) {
           <Link to={`/boards/${thread.boardSlug}`}>/{thread.boardSlug}</Link>
         </p>
       ) : null}
-      <h1 className="page-title">{thread.title}</h1>
+      <div className="thread-title-row">
+        <h1 className="page-title">{thread.title}</h1>
+        {user ? <SharePostButton threadId={thread.id} threadTitle={thread.title} /> : null}
+      </div>
       <p className="muted">
         <small>
           By{' '}
@@ -206,14 +206,15 @@ function ThreadPage({ user }) {
         </small>
       </p>
       <p className="thread-body">{renderMentions(thread.body)}</p>
-      <VoteControls thread={thread} user={user} onVote={onVote} disabled={voting} />
-      {user ? (
-        <p>
-          <Link className="btn btn--secondary" to={shareThreadTo}>
-            Share via Message
-          </Link>
-        </p>
+      {thread.imageUrl ? (
+        <img
+          className="thread-image thread-image--detail"
+          src={thread.imageUrl}
+          alt={`Image attached to ${thread.title}`}
+          loading="lazy"
+        />
       ) : null}
+      <VoteControls thread={thread} user={user} onVote={onVote} disabled={voting} />
       {user && thread.authorUserId !== user.id ? (
         <p>
           <button

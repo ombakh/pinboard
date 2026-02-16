@@ -25,6 +25,10 @@ const NOTIFICATIONS_UNREAD_UPDATE_EVENT = 'pinboard:notifications-unread-update'
 
 function App() {
   const location = useLocation();
+  const allowFreePageScroll =
+    location.pathname === '/' ||
+    location.pathname === '/boards' ||
+    location.pathname.startsWith('/boards/');
   const [user, setUser] = useState(null);
   const [authLoading, setAuthLoading] = useState(true);
   const [myPostsVersion, setMyPostsVersion] = useState(0);
@@ -57,6 +61,24 @@ function App() {
   useEffect(() => {
     applyTheme(getPreferredTheme());
   }, []);
+
+  useEffect(() => {
+    const previousBodyOverflow = document.body.style.overflow;
+    const previousHtmlOverflow = document.documentElement.style.overflow;
+
+    if (allowFreePageScroll) {
+      document.body.style.overflow = '';
+      document.documentElement.style.overflow = '';
+    } else {
+      document.body.style.overflow = 'hidden';
+      document.documentElement.style.overflow = 'hidden';
+    }
+
+    return () => {
+      document.body.style.overflow = previousBodyOverflow;
+      document.documentElement.style.overflow = previousHtmlOverflow;
+    };
+  }, [allowFreePageScroll]);
 
   useEffect(
     () => () => {
@@ -246,7 +268,7 @@ function App() {
   }
 
   return (
-    <div className="app-shell">
+    <div className={`app-shell${allowFreePageScroll ? ' app-shell--free-scroll' : ''}`}>
       <SceneBackdrop />
       <div className="app-shell__content">
         <header className="topbar">
