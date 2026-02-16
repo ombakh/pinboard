@@ -45,7 +45,8 @@ router.get('/', (req, res) => {
           n.read_at AS readAt,
           n.created_at AS createdAt,
           actor.name AS actorName,
-          actor.handle AS actorHandle
+          actor.handle AS actorHandle,
+          COALESCE(actor.email_verified_at IS NOT NULL, 0) AS actorIsEmailVerified
          FROM notifications n
          LEFT JOIN users actor ON actor.id = n.actor_user_id
          WHERE ${whereParts.join(' AND ')}
@@ -59,7 +60,8 @@ router.get('/', (req, res) => {
         userId: Number(notification.userId),
         actorUserId: notification.actorUserId ? Number(notification.actorUserId) : null,
         entityId: notification.entityId ? Number(notification.entityId) : null,
-        threadId: notification.threadId ? Number(notification.threadId) : null
+        threadId: notification.threadId ? Number(notification.threadId) : null,
+        actorIsEmailVerified: Boolean(notification.actorIsEmailVerified)
       }));
 
     return res.json({

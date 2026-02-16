@@ -64,6 +64,28 @@ function getViewerId(req) {
   }
 }
 
+function mapThreadRow(thread) {
+  return {
+    ...thread,
+    boardId: thread.boardId ? Number(thread.boardId) : null,
+    responseCount: Number(thread.responseCount),
+    authorEmailVerified: Boolean(thread.authorEmailVerified),
+    upvotes: Number(thread.upvotes),
+    downvotes: Number(thread.downvotes),
+    userVote: Number(thread.userVote)
+  };
+}
+
+function mapResponseRow(response) {
+  return {
+    ...response,
+    authorEmailVerified: Boolean(response.authorEmailVerified),
+    upvotes: Number(response.upvotes),
+    downvotes: Number(response.downvotes),
+    userVote: Number(response.userVote)
+  };
+}
+
 function buildThreadSelect() {
   return `
     SELECT
@@ -77,6 +99,7 @@ function buildThreadSelect() {
       t.author_name AS authorName,
       t.created_at AS createdAt,
       t.author_user_id AS authorUserId,
+      COALESCE(author.email_verified_at IS NOT NULL, 0) AS authorEmailVerified,
       (
         SELECT COUNT(*)
         FROM thread_responses tr
@@ -100,6 +123,7 @@ function buildThreadSelect() {
       MAX(CASE WHEN v.user_id = ? THEN v.vote ELSE 0 END) AS userVote
     FROM threads t
     LEFT JOIN boards b ON b.id = t.board_id
+    LEFT JOIN users author ON author.id = t.author_user_id
     LEFT JOIN thread_votes v ON v.thread_id = t.id
   `;
 }
@@ -111,12 +135,14 @@ function buildResponseSelect() {
       r.thread_id AS threadId,
       r.user_id AS userId,
       r.author_name AS authorName,
+      COALESCE(author.email_verified_at IS NOT NULL, 0) AS authorEmailVerified,
       r.body,
       r.created_at AS createdAt,
       COALESCE(SUM(CASE WHEN rv.vote = 1 THEN 1 ELSE 0 END), 0) AS upvotes,
       COALESCE(SUM(CASE WHEN rv.vote = -1 THEN 1 ELSE 0 END), 0) AS downvotes,
       MAX(CASE WHEN rv.user_id = ? THEN rv.vote ELSE 0 END) AS userVote
     FROM thread_responses r
+    LEFT JOIN users author ON author.id = r.user_id
     LEFT JOIN response_votes rv ON rv.response_id = r.id
   `;
 }
@@ -159,14 +185,7 @@ router.get('/', (_req, res) => {
          ORDER BY ${orderClause}`
       )
       .all(...params)
-      .map((thread) => ({
-        ...thread,
-        boardId: thread.boardId ? Number(thread.boardId) : null,
-        responseCount: Number(thread.responseCount),
-        upvotes: Number(thread.upvotes),
-        downvotes: Number(thread.downvotes),
-        userVote: Number(thread.userVote)
-      }));
+      .map(mapThreadRow);
     res.json({ threads });
   } catch (error) {
     res.status(500).json({ message: 'Failed to load threads' });
@@ -190,14 +209,7 @@ router.get('/:threadId', (req, res) => {
     }
 
     return res.json({
-      thread: {
-        ...thread,
-        boardId: thread.boardId ? Number(thread.boardId) : null,
-        responseCount: Number(thread.responseCount),
-        upvotes: Number(thread.upvotes),
-        downvotes: Number(thread.downvotes),
-        userVote: Number(thread.userVote)
-      }
+      thread: mapThreadRow(thread)
     });
   } catch (error) {
     return res.status(500).json({ message: 'Failed to load thread' });
@@ -256,14 +268,7 @@ router.post('/', requireAuth, (req, res) => {
       .get(authorUserId, result.lastInsertRowid);
 
     return res.status(201).json({
-      thread: {
-        ...thread,
-        boardId: thread.boardId ? Number(thread.boardId) : null,
-        responseCount: Number(thread.responseCount),
-        upvotes: Number(thread.upvotes),
-        downvotes: Number(thread.downvotes),
-        userVote: Number(thread.userVote)
-      }
+      thread: mapThreadRow(thread)
     });
   } catch (error) {
     return res.status(500).json({ message: 'Failed to create thread' });
@@ -308,14 +313,7 @@ router.post('/:threadId/vote', requireAuth, (req, res) => {
       .get(userId, threadId);
 
     return res.json({
-      thread: {
-        ...thread,
-        boardId: thread.boardId ? Number(thread.boardId) : null,
-        responseCount: Number(thread.responseCount),
-        upvotes: Number(thread.upvotes),
-        downvotes: Number(thread.downvotes),
-        userVote: Number(thread.userVote)
-      }
+      thread: mapThreadRow(thread)
     });
   } catch (_error) {
     return res.status(500).json({ message: 'Could not submit vote' });
@@ -371,12 +369,7 @@ router.get('/:threadId/responses', (req, res) => {
          ORDER BY datetime(r.created_at) ASC`
       )
       .all(viewerId, threadId)
-      .map((response) => ({
-        ...response,
-        upvotes: Number(response.upvotes),
-        downvotes: Number(response.downvotes),
-        userVote: Number(response.userVote)
-      }));
+      .map(mapResponseRow);
 
     return res.json({ responses });
   } catch (_error) {
@@ -452,12 +445,7 @@ router.post('/:threadId/responses', requireAuth, (req, res) => {
     });
 
     return res.status(201).json({
-      response: {
-        ...response,
-        upvotes: Number(response.upvotes),
-        downvotes: Number(response.downvotes),
-        userVote: Number(response.userVote)
-      }
+      response: mapResponseRow(response)
     });
   } catch (_error) {
     return res.status(500).json({ message: 'Failed to create response' });
@@ -509,12 +497,7 @@ router.post('/:threadId/responses/:responseId/vote', requireAuth, (req, res) => 
       .get(userId, responseId);
 
     return res.json({
-      response: {
-        ...response,
-        upvotes: Number(response.upvotes),
-        downvotes: Number(response.downvotes),
-        userVote: Number(response.userVote)
-      }
+      response: mapResponseRow(response)
     });
   } catch (_error) {
     return res.status(500).json({ message: 'Could not submit response vote' });

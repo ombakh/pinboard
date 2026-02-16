@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { useParams } from 'react-router-dom';
 import TiltCard from '../components/TiltCard.jsx';
 import SharePostButton from '../components/SharePostButton.jsx';
+import VerifiedName from '../components/VerifiedName.jsx';
 import VoteControls from '../components/VoteControls.jsx';
 import {
   createThreadResponse,
@@ -198,9 +199,11 @@ function ThreadPage({ user }) {
         <small>
           By{' '}
           {thread.authorUserId ? (
-            <Link to={`/users/${thread.authorUserId}`}>{thread.authorName}</Link>
+            <Link to={`/users/${thread.authorUserId}`}>
+              <VerifiedName name={thread.authorName} isVerified={thread.authorEmailVerified} />
+            </Link>
           ) : (
-            thread.authorName
+            <VerifiedName name={thread.authorName} isVerified={thread.authorEmailVerified} />
           )}{' '}
           on {formatDateTime(thread.createdAt, user?.timezone)}
         </small>
@@ -274,9 +277,11 @@ function ThreadPage({ user }) {
               <p className="muted">
                 <small>
                   {response.userId ? (
-                    <Link to={`/users/${response.userId}`}>{response.authorName}</Link>
+                    <Link to={`/users/${response.userId}`}>
+                      <VerifiedName name={response.authorName} isVerified={response.authorEmailVerified} />
+                    </Link>
                   ) : (
-                    response.authorName
+                    <VerifiedName name={response.authorName} isVerified={response.authorEmailVerified} />
                   )}{' '}
                   on {formatDateTime(response.createdAt, user?.timezone)}
                 </small>

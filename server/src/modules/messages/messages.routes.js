@@ -23,12 +23,15 @@ router.get('/users', (req, res) => {
     const db = getDb();
     const viewerId = req.authUser.id;
     const search = String(req.query.search || '').trim().toLowerCase();
+    const handleSearch = search.replace(/^@+/, '');
 
     const users = db
       .prepare(
         `SELECT
           u.id,
           u.name,
+          u.handle,
+          COALESCE(u.email_verified_at IS NOT NULL, 0) AS isEmailVerified,
           (
             SELECT
               CASE
@@ -67,15 +70,20 @@ router.get('/users', (req, res) => {
          ) AS unreadCount
          FROM users u
          WHERE u.id != ?
-           AND (? = '' OR lower(u.name) LIKE '%' || ? || '%')
+           AND (
+             ? = ''
+             OR lower(u.name) LIKE '%' || ? || '%'
+             OR lower(u.handle) LIKE '%' || ? || '%'
+           )
          ORDER BY
            CASE WHEN lastMessageAt IS NULL THEN 1 ELSE 0 END,
            datetime(lastMessageAt) DESC,
            lower(u.name) ASC`
       )
-      .all(viewerId, viewerId, viewerId, viewerId, viewerId, viewerId, search, search)
+      .all(viewerId, viewerId, viewerId, viewerId, viewerId, viewerId, search, search, handleSearch)
       .map((user) => ({
         ...user,
+        isEmailVerified: Boolean(user.isEmailVerified),
         unreadCount: Number(user.unreadCount)
       }));
 
@@ -97,7 +105,17 @@ router.get('/:userId', (req, res) => {
 
   try {
     const db = getDb();
-    const otherUser = db.prepare('SELECT id, name FROM users WHERE id = ?').get(otherUserId);
+    const otherUser = db
+      .prepare(
+        `SELECT
+          id,
+          name,
+          handle,
+          COALESCE(email_verified_at IS NOT NULL, 0) AS isEmailVerified
+         FROM users
+         WHERE id = ?`
+      )
+      .get(otherUserId);
     if (!otherUser) {
       return res.status(404).json({ message: 'User not found' });
     }
@@ -138,7 +156,9 @@ router.get('/:userId', (req, res) => {
     return res.json({
       user: {
         id: Number(otherUser.id),
-        name: otherUser.name
+        name: otherUser.name,
+        handle: otherUser.handle,
+        isEmailVerified: Boolean(otherUser.isEmailVerified)
       },
       messages
     });

@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import SharePostButton from '../components/SharePostButton.jsx';
 import TiltCard from '../components/TiltCard.jsx';
+import VerifiedName from '../components/VerifiedName.jsx';
 import { fetchThreads } from '../services/threadService.js';
 import { fetchFollowingThreads } from '../services/userService.js';
 import { formatDateTime } from '../utils/dateTime.js';
@@ -250,9 +251,11 @@ function HomePage({ user }) {
                 <p className="muted">
                   by{' '}
                   {thread.authorUserId ? (
-                    <Link to={`/users/${thread.authorUserId}`}>{thread.authorName}</Link>
+                    <Link to={`/users/${thread.authorUserId}`}>
+                      <VerifiedName name={thread.authorName} isVerified={thread.authorEmailVerified} />
+                    </Link>
                   ) : (
-                    thread.authorName
+                    <VerifiedName name={thread.authorName} isVerified={thread.authorEmailVerified} />
                   )}
                   {' • '}
                   {thread.boardSlug ? <Link to={`/boards/${thread.boardSlug}`}>/{thread.boardSlug}</Link> : 'No board'}
@@ -292,9 +295,11 @@ function HomePage({ user }) {
               <p className="muted">
                 by{' '}
                 {thread.authorUserId ? (
-                  <Link to={`/users/${thread.authorUserId}`}>{thread.authorName}</Link>
+                  <Link to={`/users/${thread.authorUserId}`}>
+                    <VerifiedName name={thread.authorName} isVerified={thread.authorEmailVerified} />
+                  </Link>
                 ) : (
-                  thread.authorName
+                  <VerifiedName name={thread.authorName} isVerified={thread.authorEmailVerified} />
                 )}
                 {' • '}
                 {thread.boardSlug ? <Link to={`/boards/${thread.boardSlug}`}>/{thread.boardSlug}</Link> : 'No board'}

@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
+import VerifiedName from '../components/VerifiedName.jsx';
 import { fetchChatUsers, fetchConversation, sendMessage } from '../services/chatService.js';
 import { formatDateTime } from '../utils/dateTime.js';
 import { renderMentions } from '../utils/renderMentions.jsx';
@@ -246,7 +247,9 @@ function ChatPage({ user }) {
                     setSearchParams(nextParams);
                   }}
                 >
-                  <span className="chat-user-name">{chatUser.name}</span>
+                  <span className="chat-user-name">
+                    <VerifiedName name={chatUser.name} isVerified={chatUser.isEmailVerified} />
+                  </span>
                   {chatUser.unreadCount > 0 ? (
                     <span className="chat-unread-pill">{chatUser.unreadCount}</span>
                   ) : null}
@@ -264,7 +267,15 @@ function ChatPage({ user }) {
 
       <article className="chat-panel">
         <header className="chat-panel__header">
-          <h2>{conversationUser ? conversationUser.name : selectedChatUser?.name || 'Select a chat'}</h2>
+          <h2>
+            {conversationUser ? (
+              <VerifiedName name={conversationUser.name} isVerified={conversationUser.isEmailVerified} />
+            ) : selectedChatUser ? (
+              <VerifiedName name={selectedChatUser.name} isVerified={selectedChatUser.isEmailVerified} />
+            ) : (
+              'Select a chat'
+            )}
+          </h2>
         </header>
 
         {sharedThreadId ? (

@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
+import VerifiedName from './VerifiedName.jsx';
 import { fetchChatUsers, sendMessage } from '../services/chatService.js';
 
 function SharePostButton({ threadId, threadTitle }) {
@@ -201,7 +202,9 @@ function SharePostButton({ threadId, threadTitle }) {
                         className={`share-user-option ${chatUser.id === selectedUserId ? 'is-selected' : ''}`}
                         onClick={() => setSelectedUserId(chatUser.id)}
                       >
-                        <span className="share-user-option__name">{chatUser.name}</span>
+                        <span className="share-user-option__name">
+                          <VerifiedName name={chatUser.name} isVerified={chatUser.isEmailVerified} />
+                        </span>
                         <span className="muted share-user-option__preview">
                           {chatUser.lastMessage
                             ? `${chatUser.lastMessage.slice(0, 56)}${chatUser.lastMessage.length > 56 ? '...' : ''}`

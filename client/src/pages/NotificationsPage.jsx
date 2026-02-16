@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import TiltCard from '../components/TiltCard.jsx';
+import VerifiedName from '../components/VerifiedName.jsx';
 import { formatDateTime } from '../utils/dateTime.js';
 import {
   fetchNotifications,
@@ -177,7 +178,15 @@ function NotificationsPage({ user }) {
               <div className="notification-item__body">
                 <p>{notification.message}</p>
                 <p className="muted notification-item__meta">
-                  {notification.actorName ? `${notification.actorName} • ` : ''}
+                  {notification.actorName ? (
+                    <>
+                      <VerifiedName
+                        name={notification.actorName}
+                        isVerified={notification.actorIsEmailVerified}
+                      />{' '}
+                      •{' '}
+                    </>
+                  ) : null}
                   {formatDateTime(notification.createdAt, user?.timezone)}
                 </p>
               </div>

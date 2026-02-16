@@ -2594,3 +2594,153 @@ html[data-theme='dark'] .notification-item.is-unread {
   border-color: rgba(98, 144, 219, 0.92);
   background: rgba(35, 57, 92, 0.92);
 }
+
+.verified-name {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  min-width: 0;
+  vertical-align: middle;
+}
+
+.verified-badge {
+  width: 1rem;
+  height: 1rem;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: #2167ce;
+  color: #fff;
+  border: 1px solid #184f9e;
+  font-size: 0.66rem;
+  font-weight: 700;
+  line-height: 1;
+  flex-shrink: 0;
+}
+
+.verification-banner {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.85rem;
+  padding: 0.72rem 1.25rem;
+  border-bottom: 1px solid rgba(104, 145, 203, 0.6);
+  background: rgba(228, 240, 255, 0.95);
+}
+
+.verification-banner__content {
+  min-width: 0;
+}
+
+.verification-banner__title {
+  margin: 0;
+  font-weight: 700;
+  color: #153a73;
+}
+
+.verification-banner__text {
+  margin: 0.14rem 0 0;
+  color: #355682;
+  font-size: 0.93rem;
+}
+
+.verification-banner__feedback {
+  margin: 0.28rem 0 0;
+  font-size: 0.84rem;
+  color: #1f4f8f;
+}
+
+.verification-banner__feedback--error {
+  color: #a0233f;
+}
+
+.verification-banner__dev-token {
+  margin: 0.32rem 0 0;
+  font-size: 0.8rem;
+  color: #274a77;
+}
+
+.verification-banner__dev-token code {
+  display: inline-block;
+  padding: 0.1rem 0.3rem;
+  border-radius: 6px;
+  border: 1px solid rgba(110, 147, 200, 0.8);
+  background: rgba(246, 250, 255, 0.9);
+}
+
+.verification-banner__actions {
+  display: grid;
+  gap: 0.45rem;
+  justify-items: end;
+  flex-shrink: 0;
+}
+
+.verification-banner__form {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+}
+
+.verification-banner__form input {
+  width: 18rem;
+  max-width: 100%;
+}
+
+html[data-theme='dark'] .verified-badge {
+  background: #5d97ea;
+  border-color: #72a6ef;
+  color: #11243d;
+}
+
+html[data-theme='dark'] .verification-banner {
+  border-bottom-color: rgba(79, 111, 162, 0.72);
+  background: rgba(25, 40, 63, 0.94);
+}
+
+html[data-theme='dark'] .verification-banner__title {
+  color: #dce9ff;
+}
+
+html[data-theme='dark'] .verification-banner__text {
+  color: #b4c9ea;
+}
+
+html[data-theme='dark'] .verification-banner__feedback {
+  color: #cce0ff;
+}
+
+html[data-theme='dark'] .verification-banner__feedback--error {
+  color: #ffb9c8;
+}
+
+html[data-theme='dark'] .verification-banner__dev-token {
+  color: #bcd2f4;
+}
+
+html[data-theme='dark'] .verification-banner__dev-token code {
+  border-color: rgba(82, 120, 177, 0.86);
+  background: rgba(21, 33, 55, 0.92);
+}
+
+@media (max-width: 900px) {
+  .verification-banner {
+    flex-direction: column;
+    align-items: stretch;
+    padding: 0.7rem 0.95rem;
+  }
+
+  .verification-banner__actions {
+    justify-items: stretch;
+  }
+
+  .verification-banner__form {
+    width: 100%;
+    flex-wrap: wrap;
+  }
+
+  .verification-banner__form input {
+    width: 100%;
+    flex: 1 1 auto;
+  }
+}

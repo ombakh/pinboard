@@ -139,12 +139,40 @@ function loadFollowStats(db, targetUserId, viewerId = null) {
   };
 }
 
+function mapUserWithFlags(user) {
+  if (!user) {
+    return null;
+  }
+
+  return {
+    ...user,
+    isAdmin: Boolean(user.isAdmin),
+    isModerator: Boolean(user.isModerator),
+    isEmailVerified: Boolean(user.emailVerifiedAt)
+  };
+}
+
 router.get('/me', requireAuth, (req, res) => {
   try {
     const db = getDb();
     const user = db
       .prepare(
-        `SELECT id, name, handle, email, bio, profile_image_url AS profileImageUrl, timezone, is_admin AS isAdmin, is_moderator AS isModerator, banned_at AS bannedAt, ban_reason AS banReason, suspended_until AS suspendedUntil, suspension_reason AS suspensionReason, created_at AS createdAt
+        `SELECT
+          id,
+          name,
+          handle,
+          email,
+          bio,
+          profile_image_url AS profileImageUrl,
+          timezone,
+          is_admin AS isAdmin,
+          is_moderator AS isModerator,
+          email_verified_at AS emailVerifiedAt,
+          banned_at AS bannedAt,
+          ban_reason AS banReason,
+          suspended_until AS suspendedUntil,
+          suspension_reason AS suspensionReason,
+          created_at AS createdAt
          FROM users
          WHERE id = ?`
       )
@@ -158,9 +186,7 @@ router.get('/me', requireAuth, (req, res) => {
 
     return res.json({
       user: {
-        ...user,
-        isAdmin: Boolean(user.isAdmin),
-        isModerator: Boolean(user.isModerator),
+        ...mapUserWithFlags(user),
         ...followStats
       }
     });
@@ -252,7 +278,22 @@ router.patch('/me', requireAuth, (req, res) => {
 
     const updated = db
       .prepare(
-        `SELECT id, name, handle, email, bio, profile_image_url AS profileImageUrl, timezone, is_admin AS isAdmin, is_moderator AS isModerator, banned_at AS bannedAt, ban_reason AS banReason, suspended_until AS suspendedUntil, suspension_reason AS suspensionReason, created_at AS createdAt
+        `SELECT
+          id,
+          name,
+          handle,
+          email,
+          bio,
+          profile_image_url AS profileImageUrl,
+          timezone,
+          is_admin AS isAdmin,
+          is_moderator AS isModerator,
+          email_verified_at AS emailVerifiedAt,
+          banned_at AS bannedAt,
+          ban_reason AS banReason,
+          suspended_until AS suspendedUntil,
+          suspension_reason AS suspensionReason,
+          created_at AS createdAt
          FROM users
          WHERE id = ?`
       )
@@ -262,9 +303,7 @@ router.patch('/me', requireAuth, (req, res) => {
 
     return res.json({
       user: {
-        ...updated,
-        isAdmin: Boolean(updated.isAdmin),
-        isModerator: Boolean(updated.isModerator),
+        ...mapUserWithFlags(updated),
         ...followStats
       }
     });
@@ -286,10 +325,12 @@ router.get('/me/threads', requireAuth, (req, res) => {
           t.author_name AS authorName,
           t.created_at AS createdAt,
           t.author_user_id AS authorUserId,
+          COALESCE(author.email_verified_at IS NOT NULL, 0) AS authorEmailVerified,
           COALESCE(SUM(CASE WHEN v.vote = 1 THEN 1 ELSE 0 END), 0) AS upvotes,
           COALESCE(SUM(CASE WHEN v.vote = -1 THEN 1 ELSE 0 END), 0) AS downvotes,
           MAX(CASE WHEN v.user_id = ? THEN v.vote ELSE 0 END) AS userVote
          FROM threads t
+         LEFT JOIN users author ON author.id = t.author_user_id
          LEFT JOIN thread_votes v ON v.thread_id = t.id
          WHERE t.author_user_id = ?
          GROUP BY t.id
@@ -298,6 +339,7 @@ router.get('/me/threads', requireAuth, (req, res) => {
       .all(req.authUser.id, req.authUser.id)
       .map((thread) => ({
         ...thread,
+        authorEmailVerified: Boolean(thread.authorEmailVerified),
         upvotes: Number(thread.upvotes),
         downvotes: Number(thread.downvotes),
         userVote: Number(thread.userVote)
@@ -345,6 +387,7 @@ router.get('/me/following/threads', requireAuth, (req, res) => {
           t.author_name AS authorName,
           t.created_at AS createdAt,
           t.author_user_id AS authorUserId,
+          COALESCE(author.email_verified_at IS NOT NULL, 0) AS authorEmailVerified,
           (
             SELECT COUNT(*)
             FROM thread_responses tr
@@ -364,6 +407,7 @@ router.get('/me/following/threads', requireAuth, (req, res) => {
          FROM threads t
          JOIN user_follows uf ON uf.following_user_id = t.author_user_id
          LEFT JOIN boards b ON b.id = t.board_id
+         LEFT JOIN users author ON author.id = t.author_user_id
          LEFT JOIN thread_votes v ON v.thread_id = t.id
          WHERE ${whereParts.join(' AND ')}
          GROUP BY t.id
@@ -373,6 +417,7 @@ router.get('/me/following/threads', requireAuth, (req, res) => {
       .map((thread) => ({
         ...thread,
         boardId: thread.boardId ? Number(thread.boardId) : null,
+        authorEmailVerified: Boolean(thread.authorEmailVerified),
         responseCount: Number(thread.responseCount),
         upvotes: Number(thread.upvotes),
         downvotes: Number(thread.downvotes),
@@ -466,6 +511,7 @@ router.get('/:userId', (req, res) => {
           name,
           handle,
           bio,
+          email_verified_at AS emailVerifiedAt,
           profile_image_url AS profileImageUrl,
           created_at AS createdAt
          FROM users
@@ -549,6 +595,7 @@ router.get('/:userId', (req, res) => {
     return res.json({
       user: {
         ...user,
+        isEmailVerified: Boolean(user.emailVerifiedAt),
         ...followStats
       },
       posts,
@@ -575,6 +622,7 @@ router.get('/', requireAuth, requireAdmin, (_req, res) => {
           handle,
           email,
           bio,
+          email_verified_at AS emailVerifiedAt,
           is_admin AS isAdmin,
           is_moderator AS isModerator,
           banned_at AS bannedAt,
@@ -587,9 +635,7 @@ router.get('/', requireAuth, requireAdmin, (_req, res) => {
       )
       .all()
       .map((user) => ({
-        ...user,
-        isAdmin: Boolean(user.isAdmin),
-        isModerator: Boolean(user.isModerator),
+        ...mapUserWithFlags(user),
         isSuspended: isSuspensionActive(user.suspendedUntil)
       }));
 
@@ -638,6 +684,7 @@ router.post('/:userId/moderator', requireAuth, requireAdmin, (req, res) => {
           handle,
           email,
           bio,
+          email_verified_at AS emailVerifiedAt,
           is_admin AS isAdmin,
           is_moderator AS isModerator,
           banned_at AS bannedAt,
@@ -652,9 +699,7 @@ router.post('/:userId/moderator', requireAuth, requireAdmin, (req, res) => {
 
     return res.json({
       user: {
-        ...updated,
-        isAdmin: Boolean(updated.isAdmin),
-        isModerator: Boolean(updated.isModerator),
+        ...mapUserWithFlags(updated),
         isSuspended: isSuspensionActive(updated.suspendedUntil)
       }
     });
@@ -716,6 +761,7 @@ router.post('/:userId/ban', requireAuth, requireAdmin, (req, res) => {
           handle,
           email,
           bio,
+          email_verified_at AS emailVerifiedAt,
           is_admin AS isAdmin,
           is_moderator AS isModerator,
           banned_at AS bannedAt,
@@ -730,9 +776,7 @@ router.post('/:userId/ban', requireAuth, requireAdmin, (req, res) => {
 
     return res.json({
       user: {
-        ...updated,
-        isAdmin: Boolean(updated.isAdmin),
-        isModerator: Boolean(updated.isModerator)
+        ...mapUserWithFlags(updated)
       }
     });
   } catch (_error) {
@@ -797,6 +841,7 @@ router.post('/:userId/suspend', requireAuth, requireAdmin, (req, res) => {
           handle,
           email,
           bio,
+          email_verified_at AS emailVerifiedAt,
           is_admin AS isAdmin,
           is_moderator AS isModerator,
           banned_at AS bannedAt,
@@ -811,9 +856,7 @@ router.post('/:userId/suspend', requireAuth, requireAdmin, (req, res) => {
 
     return res.json({
       user: {
-        ...updated,
-        isAdmin: Boolean(updated.isAdmin),
-        isModerator: Boolean(updated.isModerator),
+        ...mapUserWithFlags(updated),
         isSuspended: isSuspensionActive(updated.suspendedUntil)
       }
     });

@@ -1,6 +1,8 @@
 const express = require('express');
 const bcrypt = require('bcryptjs');
+const crypto = require('crypto');
 const { getDb } = require('../../db');
+const requireAuth = require('../../middlewares/requireAuth');
 const {
   clearAuthCookie,
   setAuthCookie,
@@ -12,6 +14,54 @@ const {
 const router = express.Router();
 const OM_OVERRIDE_NAME = 'om bakhshi';
 const OM_OVERRIDE_EMAIL = 'ombakh28@gmail.com';
+const EMAIL_VERIFICATION_TOKEN_BYTES = 32;
+const EMAIL_VERIFICATION_TOKEN_EXPIRY_HOURS = 24;
+
+function hashEmailVerificationToken(token) {
+  return crypto.createHash('sha256').update(String(token || '')).digest('hex');
+}
+
+function generateEmailVerificationToken() {
+  return crypto.randomBytes(EMAIL_VERIFICATION_TOKEN_BYTES).toString('hex');
+}
+
+function mapUserForClient(row) {
+  if (!row) {
+    return null;
+  }
+
+  return {
+    ...row,
+    isAdmin: Boolean(row.isAdmin),
+    isModerator: Boolean(row.isModerator),
+    isEmailVerified: Boolean(row.emailVerifiedAt)
+  };
+}
+
+function loadUserForAuthById(db, userId) {
+  return db
+    .prepare(
+      `SELECT
+        id,
+        name,
+        handle,
+        email,
+        bio,
+        profile_image_url AS profileImageUrl,
+        timezone,
+        is_admin AS isAdmin,
+        is_moderator AS isModerator,
+        email_verified_at AS emailVerifiedAt,
+        banned_at AS bannedAt,
+        ban_reason AS banReason,
+        suspended_until AS suspendedUntil,
+        suspension_reason AS suspensionReason,
+        created_at AS createdAt
+       FROM users
+       WHERE id = ?`
+    )
+    .get(userId);
+}
 
 function parseSqliteTimestamp(value) {
   if (!value) {
@@ -102,19 +152,33 @@ router.post('/register', (req, res) => {
 
     const user = db
       .prepare(
-        `SELECT id, name, handle, email, bio, profile_image_url AS profileImageUrl, timezone, is_admin AS isAdmin, is_moderator AS isModerator, banned_at AS bannedAt, ban_reason AS banReason, suspended_until AS suspendedUntil, suspension_reason AS suspensionReason, created_at AS createdAt
+        `SELECT
+          id,
+          name,
+          handle,
+          email,
+          bio,
+          profile_image_url AS profileImageUrl,
+          timezone,
+          is_admin AS isAdmin,
+          is_moderator AS isModerator,
+          email_verified_at AS emailVerifiedAt,
+          banned_at AS bannedAt,
+          ban_reason AS banReason,
+          suspended_until AS suspendedUntil,
+          suspension_reason AS suspensionReason,
+          created_at AS createdAt
          FROM users
          WHERE id = ?`
       )
       .get(insert.lastInsertRowid);
 
-    user.isAdmin = Boolean(user.isAdmin);
-    user.isModerator = Boolean(user.isModerator);
+    const safeUser = mapUserForClient(user);
 
-    const token = signUserToken(user);
+    const token = signUserToken(safeUser);
     setAuthCookie(res, token);
 
-    return res.status(201).json({ user });
+    return res.status(201).json({ user: safeUser });
   } catch (_error) {
     return res.status(500).json({ message: 'Could not register user' });
   }
@@ -161,6 +225,8 @@ router.post('/login', (req, res) => {
       timezone: user.timezone,
       isAdmin: Boolean(user.is_admin),
       isModerator: Boolean(user.is_moderator),
+      emailVerifiedAt: user.email_verified_at,
+      isEmailVerified: Boolean(user.email_verified_at),
       bannedAt: user.banned_at,
       banReason: user.ban_reason,
       suspendedUntil: user.suspended_until,
@@ -190,13 +256,7 @@ router.get('/me', (req, res) => {
 
     const payload = verifyUserToken(token);
     const db = getDb();
-    const user = db
-      .prepare(
-        `SELECT id, name, handle, email, bio, profile_image_url AS profileImageUrl, timezone, is_admin AS isAdmin, is_moderator AS isModerator, banned_at AS bannedAt, ban_reason AS banReason, suspended_until AS suspendedUntil, suspension_reason AS suspensionReason, created_at AS createdAt
-         FROM users
-         WHERE id = ?`
-      )
-      .get(payload.sub);
+    const user = loadUserForAuthById(db, payload.sub);
 
     if (!user) {
       clearAuthCookie(res);
@@ -215,12 +275,130 @@ router.get('/me', (req, res) => {
       });
     }
 
-    user.isAdmin = Boolean(user.isAdmin);
-    user.isModerator = Boolean(user.isModerator);
-    return res.json({ user });
+    return res.json({ user: mapUserForClient(user) });
   } catch (_error) {
     clearAuthCookie(res);
     return res.status(401).json({ message: 'Unauthorized' });
+  }
+});
+
+router.post('/email-verification/request', requireAuth, (req, res) => {
+  try {
+    const db = getDb();
+    const current = db
+      .prepare(
+        `SELECT
+          id,
+          email_verified_at AS emailVerifiedAt
+         FROM users
+         WHERE id = ?`
+      )
+      .get(req.authUser.id);
+
+    if (!current) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+
+    if (current.emailVerifiedAt) {
+      return res.json({
+        message: 'Email already verified',
+        isEmailVerified: true
+      });
+    }
+
+    const token = generateEmailVerificationToken();
+    const tokenHash = hashEmailVerificationToken(token);
+    const transaction = db.transaction(() => {
+      db.prepare(
+        `UPDATE email_verification_tokens
+         SET used_at = CURRENT_TIMESTAMP
+         WHERE user_id = ?
+           AND used_at IS NULL`
+      ).run(req.authUser.id);
+
+      db.prepare(
+        `INSERT INTO email_verification_tokens (user_id, token_hash, expires_at)
+         VALUES (?, ?, datetime('now', ?))`
+      ).run(req.authUser.id, tokenHash, `+${EMAIL_VERIFICATION_TOKEN_EXPIRY_HOURS} hours`);
+    });
+    transaction();
+
+    const payload = {
+      message: 'Verification email requested',
+      isEmailVerified: false
+    };
+
+    if (process.env.NODE_ENV !== 'production') {
+      payload.devVerificationToken = token;
+      payload.devVerificationLink = `/verify-email?token=${token}`;
+      payload.expiresInHours = EMAIL_VERIFICATION_TOKEN_EXPIRY_HOURS;
+    }
+
+    return res.status(201).json(payload);
+  } catch (_error) {
+    return res.status(500).json({ message: 'Could not request email verification' });
+  }
+});
+
+router.post('/email-verification/verify', requireAuth, (req, res) => {
+  const token = String(req.body.token || '').trim();
+  if (!token) {
+    return res.status(400).json({ message: 'Verification token is required' });
+  }
+
+  try {
+    const db = getDb();
+    const tokenHash = hashEmailVerificationToken(token);
+    const tokenRow = db
+      .prepare(
+        `SELECT
+          id,
+          user_id AS userId,
+          expires_at AS expiresAt,
+          used_at AS usedAt
+         FROM email_verification_tokens
+         WHERE token_hash = ?
+           AND user_id = ?`
+      )
+      .get(tokenHash, req.authUser.id);
+
+    if (!tokenRow) {
+      return res.status(400).json({ message: 'Invalid verification token' });
+    }
+
+    if (tokenRow.usedAt) {
+      return res.status(400).json({ message: 'Verification token has already been used' });
+    }
+
+    const expiresAt = parseSqliteTimestamp(tokenRow.expiresAt);
+    if (!expiresAt || expiresAt.getTime() <= Date.now()) {
+      return res.status(400).json({ message: 'Verification token has expired' });
+    }
+
+    const transaction = db.transaction(() => {
+      db.prepare(
+        `UPDATE users
+         SET email_verified_at = COALESCE(email_verified_at, CURRENT_TIMESTAMP)
+         WHERE id = ?`
+      ).run(req.authUser.id);
+
+      db.prepare(
+        `UPDATE email_verification_tokens
+         SET used_at = CURRENT_TIMESTAMP
+         WHERE user_id = ?
+           AND used_at IS NULL`
+      ).run(req.authUser.id);
+    });
+    transaction();
+
+    const updatedUser = loadUserForAuthById(db, req.authUser.id);
+
+    return res.json({
+      message: 'Email verified',
+      user: mapUserForClient(updatedUser)
+    });
+  } catch (_error) {
+    return res.status(500).json({ message: 'Could not verify email' });
   }
 });
 
